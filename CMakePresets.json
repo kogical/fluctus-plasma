@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
+        "FLUCTUS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
+        "FLUCTUS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "debug-asan-ubsan",
+      "displayName": "Debug + ASan/UBSan (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug-asan-ubsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
+        "FLUCTUS_BUILD_TESTS": "ON",
+        "FLUCTUS_ENABLE_SANITIZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "debug-asan-ubsan",
+      "configurePreset": "debug-asan-ubsan"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug-asan-ubsan",
+      "configurePreset": "debug-asan-ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
