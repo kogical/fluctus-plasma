@@ -8,9 +8,8 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: configPage
 
-    property alias cfg_autoScaleToPanel: autoScaleCheck.checked
-    property alias cfg_baseIconSize: baseIconSizeSpin.value
-    property alias cfg_iconSpacing: iconSpacingSpin.value
+    property alias cfg_panelIconRatio: panelIconRatioSlider.value
+    property alias cfg_iconSpacingRatio: iconSpacingRatioSlider.value
     property alias cfg_edgePadding: edgePaddingSpin.value
     property alias cfg_topMargin: topMarginSpin.value
 
@@ -47,30 +46,47 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Sizing & Panel Fit")
         }
 
-        QQC2.CheckBox {
-            id: autoScaleCheck
-            Kirigami.FormData.label: i18n("Panel scaling:")
-            text: i18n("Automatically scale icons to fit the surrounding Plasma panel")
+        RowLayout {
+            Kirigami.FormData.label: i18n("Icon size:")
+            Layout.fillWidth: true
+
+            QQC2.Slider {
+                id: panelIconRatioSlider
+                Layout.fillWidth: true
+                from: 0.25
+                to: 1.0
+                stepSize: 0.05
+            }
+            QQC2.Label {
+                Layout.minimumWidth: 46
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(panelIconRatioSlider.value * 100) + "%"
+            }
         }
 
-        QQC2.SpinBox {
-            id: baseIconSizeSpin
-            Kirigami.FormData.label: i18n("Fixed icon size:")
-            enabled: !autoScaleCheck.checked
-            from: 20
-            to: 128
-            stepSize: 2
-            textFromValue: function(value) { return value + " px"; }
-            valueFromText: function(text) { return parseInt(text, 10) || 48; }
-        }
-
-        QQC2.SpinBox {
-            id: iconSpacingSpin
+        RowLayout {
             Kirigami.FormData.label: i18n("Icon spacing:")
-            from: 0
-            to: 32
-            textFromValue: function(value) { return value + " px"; }
-            valueFromText: function(text) { return parseInt(text, 10) || 0; }
+            Layout.fillWidth: true
+
+            QQC2.Slider {
+                id: iconSpacingRatioSlider
+                Layout.fillWidth: true
+                from: 0.0
+                to: 0.50
+                stepSize: 0.02
+            }
+            QQC2.Label {
+                Layout.minimumWidth: 46
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(iconSpacingRatioSlider.value * 100) + "%"
+            }
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: true
+            type: Kirigami.MessageType.Information
+            text: i18n("Icon size is a percentage of available panel thickness; icon spacing is a percentage of icon size. Resize your Plasma panel in Edit Mode to scale the dock.")
         }
 
         QQC2.SpinBox {

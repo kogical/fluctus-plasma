@@ -203,6 +203,7 @@ set_source_files_properties(package/contents/config/main.xml PROPERTIES QT_RESOU
 
 if(ECM_FOUND)
     find_package(KF6CoreAddons 6.0 REQUIRED)
+    find_package(KF6GuiAddons 6.0 REQUIRED)
     find_package(KF6I18n 6.0 REQUIRED)
     find_package(KF6GlobalAccel 6.0 REQUIRED)
     find_package(KF6Service 6.0 REQUIRED)
@@ -246,6 +247,7 @@ if(ECM_FOUND)
         Plasma::Plasma
         PW::LibTaskManager
         KF6::CoreAddons
+        KF6::GuiAddons
         KF6::I18n
         KF6::WindowSystem
         KF6::GlobalAccel

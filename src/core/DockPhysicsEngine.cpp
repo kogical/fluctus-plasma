@@ -72,7 +72,51 @@ void DockPhysicsEngine::removeSlot(std::size_t activeIndex, bool animate) {
     m_dirty = true;
 }
 
-void DockPhysicsEngine::moveSlot(std::size_t fromActiveIndex, std::size_t toActiveIndex) {
+bool DockPhysicsEngine::removeSlotById(std::uint64_t slotId, bool animate) {
+    const auto it = std::find_if(
+        m_slots.begin(),
+        m_slots.end(),
+        [slotId](const InternalSlot &s) { return s.id == slotId; }
+    );
+    if (it == m_slots.end()) {
+        return false;
+    }
+    if (!animate) {
+        m_slots.erase(it);
+    } else {
+        it->ghost = true;
+        it->weightSpring.target = 0.0;
+        it->bounce.setActive(false);
+    }
+    m_dirty = true;
+    return true;
+}
+
+bool DockPhysicsEngine::reviveSlotById(std::uint64_t slotId, bool snapWeight) {
+    const auto it = std::find_if(
+        m_slots.begin(),
+        m_slots.end(),
+        [slotId](const InternalSlot &s) { return s.id == slotId; }
+    );
+    if (it == m_slots.end()) {
+        return false;
+    }
+    it->ghost = false;
+    if (snapWeight) {
+        it->weightSpring.snap(1.0);
+    } else {
+        it->weightSpring.target = 1.0;
+    }
+    m_dirty = true;
+    return true;
+}
+
+void DockPhysicsEngine::moveSlot(
+    std::size_t fromActiveIndex,
+    std::size_t toActiveIndex,
+    double containerWidth,
+    double containerHeight
+) {
     if (fromActiveIndex == toActiveIndex) {
         return;
     }
@@ -81,15 +125,24 @@ void DockPhysicsEngine::moveSlot(std::size_t fromActiveIndex, std::size_t toActi
         return;
     }
 
-    // Snapshot resting canonical centers before the move so displaced slots glide smoothly.
-    const double pitch = m_config.pitch();
+    const ResolvedMetrics metrics = resolveMetrics(containerWidth, containerHeight);
+    const double pitch = metrics.baseIconSize + metrics.iconSpacing;
+    const double restingLength = computeRestingLength(metrics);
+    const double alpha = std::clamp(m_hoverSpring.value, 0.0, 1.0);
+    const double pointer = m_hasPointerCanonical ? m_pointerCanonical : restingLength * 0.5;
+
+    // Snapshot live display canonical centers before the move so displaced slots glide with zero jump.
     std::vector<std::pair<std::uint64_t, double>> oldPos;
     oldPos.reserve(m_slots.size());
     double cursor = 0.0;
     for (const auto &s : m_slots) {
         const double w = std::clamp(s.weightSpring.value, 0.0, 1.0);
-        oldPos.emplace_back(s.id, cursor + 0.5 * m_config.baseIconSize * w);
-        cursor += (m_config.baseIconSize + m_config.iconSpacing) * w;
+        const double a = cursor;
+        const double b = cursor + metrics.baseIconSize * w;
+        const double xa = mapCanonicalCoordinateWith(a, pointer, alpha, metrics);
+        const double xb = mapCanonicalCoordinateWith(b, pointer, alpha, metrics);
+        oldPos.emplace_back(s.id, 0.5 * (xa + xb));
+        cursor = b + metrics.iconSpacing * w;
     }
 
     InternalSlot moved = m_slots[fromIdx];
@@ -114,7 +167,11 @@ void DockPhysicsEngine::moveSlot(std::size_t fromActiveIndex, std::size_t toActi
     const double maxOffset = std::max(pitch * 4.0, 128.0);
     for (auto &s : m_slots) {
         const double w = std::clamp(s.weightSpring.value, 0.0, 1.0);
-        const double newCenter = cursor + 0.5 * m_config.baseIconSize * w;
+        const double a = cursor;
+        const double b = cursor + metrics.baseIconSize * w;
+        const double xa = mapCanonicalCoordinateWith(a, pointer, alpha, metrics);
+        const double xb = mapCanonicalCoordinateWith(b, pointer, alpha, metrics);
+        const double newCenter = 0.5 * (xa + xb);
         const auto it = std::find_if(
             oldPos.begin(),
             oldPos.end(),
@@ -128,10 +185,110 @@ void DockPhysicsEngine::moveSlot(std::size_t fromActiveIndex, std::size_t toActi
                     -maxOffset,
                     maxOffset
                 );
+                s.reorderOffsetSpring.velocity = 0.0;
                 s.reorderOffsetSpring.target = 0.0;
             }
         }
-        cursor += (m_config.baseIconSize + m_config.iconSpacing) * w;
+        cursor = b + metrics.iconSpacing * w;
+    }
+
+    m_dirty = true;
+}
+
+void DockPhysicsEngine::reorderActiveSlots(
+    const std::vector<std::uint64_t> &orderedActiveIds,
+    double containerWidth,
+    double containerHeight
+) {
+    if (orderedActiveIds.size() != activeSlotCount() || orderedActiveIds.empty()) {
+        return;
+    }
+
+    // Check if active slots are already in the requested order.
+    bool alreadyOrdered = true;
+    std::size_t activeCursor = 0;
+    for (const auto &s : m_slots) {
+        if (!s.ghost) {
+            if (s.id != orderedActiveIds[activeCursor]) {
+                alreadyOrdered = false;
+                break;
+            }
+            ++activeCursor;
+        }
+    }
+    if (alreadyOrdered) {
+        return;
+    }
+
+    const ResolvedMetrics metrics = resolveMetrics(containerWidth, containerHeight);
+    const double pitch = metrics.baseIconSize + metrics.iconSpacing;
+    const double restingLength = computeRestingLength(metrics);
+    const double alpha = std::clamp(m_hoverSpring.value, 0.0, 1.0);
+    const double pointer = m_hasPointerCanonical ? m_pointerCanonical : restingLength * 0.5;
+
+    // Snapshot live display canonical centers before reordering so displaced slots glide with zero jump.
+    std::vector<std::pair<std::uint64_t, double>> oldPos;
+    oldPos.reserve(m_slots.size());
+    double cursor = 0.0;
+    for (const auto &s : m_slots) {
+        const double w = std::clamp(s.weightSpring.value, 0.0, 1.0);
+        const double a = cursor;
+        const double b = cursor + metrics.baseIconSize * w;
+        const double xa = mapCanonicalCoordinateWith(a, pointer, alpha, metrics);
+        const double xb = mapCanonicalCoordinateWith(b, pointer, alpha, metrics);
+        oldPos.emplace_back(s.id, 0.5 * (xa + xb));
+        cursor = b + metrics.iconSpacing * w;
+    }
+
+    std::vector<InternalSlot> reorderedActive;
+    reorderedActive.reserve(orderedActiveIds.size());
+    for (const std::uint64_t targetId : orderedActiveIds) {
+        const auto it = std::find_if(
+            m_slots.begin(),
+            m_slots.end(),
+            [targetId](const InternalSlot &s) { return !s.ghost && s.id == targetId; }
+        );
+        if (it == m_slots.end()) {
+            return;
+        }
+        reorderedActive.push_back(*it);
+    }
+
+    std::size_t nextActive = 0;
+    for (auto &s : m_slots) {
+        if (!s.ghost) {
+            s = reorderedActive[nextActive++];
+        }
+    }
+
+    // Seed each displaced slot's critically-damped reorder offset spring with (oldCenter - newCenter).
+    cursor = 0.0;
+    const double maxOffset = std::max(pitch * 4.0, 128.0);
+    for (auto &s : m_slots) {
+        const double w = std::clamp(s.weightSpring.value, 0.0, 1.0);
+        const double a = cursor;
+        const double b = cursor + metrics.baseIconSize * w;
+        const double xa = mapCanonicalCoordinateWith(a, pointer, alpha, metrics);
+        const double xb = mapCanonicalCoordinateWith(b, pointer, alpha, metrics);
+        const double newCenter = 0.5 * (xa + xb);
+        const auto it = std::find_if(
+            oldPos.begin(),
+            oldPos.end(),
+            [id = s.id](const auto &p) { return p.first == id; }
+        );
+        if (it != oldPos.end()) {
+            const double delta = it->second - newCenter;
+            if (std::abs(delta) > 1e-3) {
+                s.reorderOffsetSpring.value = std::clamp(
+                    s.reorderOffsetSpring.value + delta,
+                    -maxOffset,
+                    maxOffset
+                );
+                s.reorderOffsetSpring.velocity = 0.0;
+                s.reorderOffsetSpring.target = 0.0;
+            }
+        }
+        cursor = b + metrics.iconSpacing * w;
     }
 
     m_dirty = true;
@@ -150,6 +307,19 @@ void DockPhysicsEngine::setSlotBouncing(std::size_t activeIndex, bool bouncing) 
         return;
     }
     m_slots[idx].bounce.setActive(bouncing && m_config.bounceEnabled);
+    m_dirty = true;
+}
+
+void DockPhysicsEngine::setSlotBouncingById(std::uint64_t slotId, bool bouncing) {
+    const auto it = std::find_if(
+        m_slots.begin(),
+        m_slots.end(),
+        [slotId](const InternalSlot &s) { return s.id == slotId; }
+    );
+    if (it == m_slots.end()) {
+        return;
+    }
+    it->bounce.setActive(bouncing && m_config.bounceEnabled);
     m_dirty = true;
 }
 
@@ -181,19 +351,18 @@ DockPhysicsEngine::ResolvedMetrics DockPhysicsEngine::resolveMetrics(
             containerCross - m_config.edgePadding - m_config.topMargin
         );
         if (m_config.autoScaleToPanel) {
-            if (m.maxScale > 1.0) {
-                m.baseIconSize = std::clamp(
-                    availableCross / m.maxScale,
-                    std::min(24.0, availableCross),
-                    128.0
-                );
+            const double ratio = std::clamp(m_config.panelIconRatio, 0.25, 1.0);
+            m.baseIconSize = std::clamp(
+                availableCross * ratio,
+                std::min(16.0, availableCross),
+                128.0
+            );
+            m.iconSpacing = m.baseIconSize * std::clamp(m_config.iconSpacingRatio, 0.0, 0.75);
+            if (m_config.magnificationEnabled && !m_config.editModeFrozen) {
+                const double targetZoomRatio = std::clamp(m_config.maxZoomPanelRatio, 0.25, 1.0);
+                m.maxScale = std::max(1.0, targetZoomRatio / ratio);
             } else {
-                const double crossPad = 2.0 * m_config.pillPaddingCross;
-                m.baseIconSize = std::clamp(
-                    availableCross - crossPad,
-                    std::min(16.0, availableCross),
-                    128.0
-                );
+                m.maxScale = 1.0;
             }
         } else if (m_config.clampToContainer) {
             m.baseIconSize = std::min(m.baseIconSize, availableCross);
@@ -239,6 +408,13 @@ double DockPhysicsEngine::effectiveBaseIconSize(
     double containerHeight
 ) const noexcept {
     return resolveMetrics(containerWidth, containerHeight).baseIconSize;
+}
+
+double DockPhysicsEngine::effectiveIconSpacing(
+    double containerWidth,
+    double containerHeight
+) const noexcept {
+    return resolveMetrics(containerWidth, containerHeight).iconSpacing;
 }
 
 double DockPhysicsEngine::effectiveMaxScaleForContainer(
@@ -373,6 +549,56 @@ std::size_t DockPhysicsEngine::restingInsertionIndex(
     return static_cast<std::size_t>(std::clamp(rawIndex, 0.0, static_cast<double>(count)));
 }
 
+std::size_t DockPhysicsEngine::restingDragTargetIndex(
+    Vec2 containerPoint,
+    double containerWidth,
+    double containerHeight,
+    int currentIndex
+) const noexcept {
+    const std::size_t count = activeSlotCount();
+    if (count == 0) {
+        return 0;
+    }
+
+    const ResolvedMetrics metrics = resolveMetrics(containerWidth, containerHeight);
+    const double restingLength = static_cast<double>(count) * metrics.baseIconSize
+        + static_cast<double>(count - 1) * metrics.iconSpacing;
+    const double containerPrimary = m_config.axis.primaryExtent(containerWidth, containerHeight);
+    const double originP = dockOriginPrimary(containerPrimary, restingLength);
+    const double pContainer = m_config.axis.primaryCoord(containerPoint);
+    const double pCanonical = m_config.axis.containerToCanonicalPrimary(pContainer, originP, restingLength);
+
+    const double pitch = metrics.baseIconSize + metrics.iconSpacing;
+    if (pitch <= 0.0) {
+        return 0;
+    }
+
+    if (currentIndex < 0 || static_cast<std::size_t>(currentIndex) >= count) {
+        const std::size_t raw = restingInsertionIndex(containerPoint, containerWidth, containerHeight);
+        return std::min(raw, count - 1);
+    }
+
+    const double deadzone = 0.18 * pitch;
+    std::size_t k = static_cast<std::size_t>(currentIndex);
+    while (k + 1 < count) {
+        const double boundary = static_cast<double>(k + 1) * pitch - 0.5 * metrics.iconSpacing;
+        if (pCanonical > boundary + deadzone) {
+            ++k;
+        } else {
+            break;
+        }
+    }
+    while (k > 0) {
+        const double boundary = static_cast<double>(k) * pitch - 0.5 * metrics.iconSpacing;
+        if (pCanonical < boundary - deadzone) {
+            --k;
+        } else {
+            break;
+        }
+    }
+    return k;
+}
+
 Rect DockPhysicsEngine::insertionIndicatorRect(
     std::size_t insertionIndex,
     double containerWidth,
@@ -476,7 +702,7 @@ bool DockPhysicsEngine::step(double dt, double containerWidth, double containerH
     }
 
     std::erase_if(m_slots, [](const InternalSlot &slot) {
-        return slot.ghost && slot.weightSpring.value <= 0.0 && slot.weightSpring.target <= 0.0;
+        return slot.ghost && slot.weightSpring.target <= 0.0 && slot.weightSpring.value <= 0.02;
     });
 
     // 3. Step latched bounce physics using current scale and available panel headroom.

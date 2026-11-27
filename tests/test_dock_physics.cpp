@@ -285,6 +285,18 @@ private Q_SLOTS:
         const double tallBase = engine.effectiveBaseIconSize(800.0, tallH);
         QVERIFY(tallBase > smallBase);
 
+        // Explicit proportional panel ratios: 50% resting icon, 90% max zoom (1.8x), 20% spacing.
+        cfg.panelIconRatio = 0.50;
+        cfg.maxZoomPanelRatio = 0.90;
+        cfg.iconSpacingRatio = 0.20;
+        engine.setConfig(cfg);
+        const double halfBase = engine.effectiveBaseIconSize(800.0, 108.0);
+        const double targetZoom = engine.effectiveMaxScaleForContainer(800.0, 108.0);
+        const double propSpacing = engine.effectiveIconSpacing(800.0, 108.0);
+        QVERIFY(std::abs(halfBase - 50.0) < 1e-6);
+        QVERIFY(std::abs(targetZoom - 1.8) < 1e-6);
+        QVERIFY(std::abs(propSpacing - 10.0) < 1e-6);
+
         // Narrow primary container: icons compress smoothly so pill never overflows container width.
         const double narrowW = 180.0;
         const DockFrame narrowFrame = engine.computeFrame(narrowW, 80.0);
@@ -329,6 +341,13 @@ private Q_SLOTS:
         const Rect ind = engine.insertionIndicatorRect(2, W, H);
         QVERIFY(ind.width > 0.0 && ind.height > 0.0);
         QVERIFY(ind.x >= 0.0 && ind.x + ind.width <= W);
+
+        // Drag target index hysteresis: hovering near a slot boundary must not oscillate.
+        const double boundaryX = 0.5 * (settled.items[0].restingRect.x + settled.items[0].restingRect.width
+                                        + settled.items[1].restingRect.x);
+        QCOMPARE(engine.restingDragTargetIndex(Vec2{boundaryX + 2.0, H - 10.0}, W, H, 0), std::size_t{0});
+        QCOMPARE(engine.restingDragTargetIndex(Vec2{boundaryX + 20.0, H - 10.0}, W, H, 0), std::size_t{1});
+        QCOMPARE(engine.restingDragTargetIndex(Vec2{boundaryX - 2.0, H - 10.0}, W, H, 1), std::size_t{1});
     }
 };
 

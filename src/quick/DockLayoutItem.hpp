@@ -10,6 +10,8 @@
 #include <QQmlComponent>
 #include <QQuickItem>
 #include <QRectF>
+#include <QTimer>
+#include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
 #include <cstdint>
@@ -40,6 +42,9 @@ class DockLayoutItem : public QQuickItem {
     Q_PROPERTY(bool magnificationEnabled READ magnificationEnabled WRITE setMagnificationEnabled NOTIFY configChanged)
     Q_PROPERTY(bool editModeFrozen READ editModeFrozen WRITE setEditModeFrozen NOTIFY configChanged)
     Q_PROPERTY(bool autoScaleToPanel READ autoScaleToPanel WRITE setAutoScaleToPanel NOTIFY configChanged)
+    Q_PROPERTY(qreal panelIconRatio READ panelIconRatio WRITE setPanelIconRatio NOTIFY configChanged)
+    Q_PROPERTY(qreal maxZoomPanelRatio READ maxZoomPanelRatio WRITE setMaxZoomPanelRatio NOTIFY configChanged)
+    Q_PROPERTY(qreal iconSpacingRatio READ iconSpacingRatio WRITE setIconSpacingRatio NOTIFY configChanged)
     Q_PROPERTY(bool clampToContainer READ clampToContainer WRITE setClampToContainer NOTIFY configChanged)
     Q_PROPERTY(bool blurEnabled READ blurEnabled WRITE setBlurEnabled NOTIFY blurConfigChanged)
     Q_PROPERTY(int blurStyle READ blurStyle WRITE setBlurStyle NOTIFY blurConfigChanged)
@@ -103,6 +108,15 @@ public:
     [[nodiscard]] bool autoScaleToPanel() const noexcept { return m_config.autoScaleToPanel; }
     void setAutoScaleToPanel(bool enabled);
 
+    [[nodiscard]] qreal panelIconRatio() const noexcept { return m_config.panelIconRatio; }
+    void setPanelIconRatio(qreal ratio);
+
+    [[nodiscard]] qreal maxZoomPanelRatio() const noexcept { return m_config.maxZoomPanelRatio; }
+    void setMaxZoomPanelRatio(qreal ratio);
+
+    [[nodiscard]] qreal iconSpacingRatio() const noexcept { return m_config.iconSpacingRatio; }
+    void setIconSpacingRatio(qreal ratio);
+
     [[nodiscard]] bool clampToContainer() const noexcept { return m_config.clampToContainer; }
     void setClampToContainer(bool enabled);
 
@@ -142,6 +156,7 @@ public:
     Q_INVOKABLE void updatePointer(qreal x, qreal y);
     Q_INVOKABLE void clearPointer();
     Q_INVOKABLE int restingInsertionIndex(qreal x, qreal y) const;
+    Q_INVOKABLE int restingDragTargetIndex(qreal x, qreal y, int currentIndex) const;
     Q_INVOKABLE QRectF insertionIndicatorRect(int insertionIndex) const;
     Q_INVOKABLE QQuickItem *itemAtIndex(int activeIndex) const;
     Q_INVOKABLE void reapplyBlur();
@@ -174,6 +189,10 @@ private Q_SLOTS:
         const QModelIndex &destination,
         int row
     );
+    void onLayoutChanged(
+        const QList<QPersistentModelIndex> &parents,
+        QAbstractItemModel::LayoutChangeHint hint
+    );
     void onDataChanged(
         const QModelIndex &topLeft,
         const QModelIndex &bottomRight,
@@ -181,16 +200,28 @@ private Q_SLOTS:
     );
 
 private:
+    struct TaskIdentity {
+        bool hasTaskRoles{false};
+        QString storageOrAppId;
+        QString launcherUrl;
+        QString appName;
+    };
+
     struct ManagedDelegate {
         std::uint64_t slotId{0};
         QPersistentModelIndex modelIndex;
         QPointer<QQuickItem> item;
         bool ghost{false};
+        bool isStartup{false};
+        bool isLauncher{false};
+        TaskIdentity identity{};
     };
 
+    void scheduleReconcile();
+    void reconcileModel();
     void rebuildAllDelegates();
     void clearAllDelegates();
-    QQuickItem *createDelegateForRow(int row, std::uint64_t slotId);
+    QQuickItem *createDelegateForRow(int row, std::uint64_t slotId, bool startHidden = false);
     void syncDelegateProperties(ManagedDelegate &entry, int activeIndex);
     void syncAllDelegateSizesAndOrigins();
     void updateStructuralImplicitSize();
@@ -198,6 +229,9 @@ private:
     void updateAttentionState();
     void refreshDevicePixelRatio();
     void updateBlurRegion();
+    [[nodiscard]] bool hasTaskModelRoles() const;
+    [[nodiscard]] TaskIdentity readTaskIdentity(int row) const;
+    [[nodiscard]] static bool matchesTaskIdentity(const TaskIdentity &a, const TaskIdentity &b) noexcept;
     [[nodiscard]] QQuickItem::TransformOrigin transformOriginForEdge() const noexcept;
     [[nodiscard]] int roleIdByName(const QByteArray &name) const;
     [[nodiscard]] bool isRowBouncing(int row) const;
@@ -207,6 +241,7 @@ private:
     core::DockPhysicsEngine m_engine{};
     DockAnimationDriver *m_driver{nullptr};
     BlurRegionController *m_blurController{nullptr};
+    QTimer m_reconcileTimer;
 
     QPointer<QAbstractItemModel> m_model;
     QPointer<QQmlComponent> m_delegate;
@@ -218,6 +253,8 @@ private:
     int m_blurStyle{0};
     qreal m_pillCornerRadius{16.0};
     bool m_hasAttentionTask{false};
+    bool m_suppressNextLayoutReorder{false};
+    double m_lastDelegateLogicalSize{0.0};
 };
 
 } // namespace fluctus::quick

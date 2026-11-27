@@ -3,6 +3,7 @@
 
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QSortFilterProxyModel>
 #include <QStandardItemModel>
 #include <QtTest/QtTest>
 
@@ -90,6 +91,376 @@ private Q_SLOTS:
         // Remove a row -> active count drops immediately (ghost slot animates out).
         model.removeRow(1);
         QCOMPARE(dock.count(), 4);
+    }
+
+    void testProxyModelLayoutChangedPreservesDelegatesAndSyncsIndices() {
+        QQmlEngine engine;
+        QQmlComponent delegateComp(&engine);
+        delegateComp.setData(
+            R"(
+            import QtQuick
+            Item {
+                property int taskIndex: -1
+                property var modelIndex
+                property string displayTitle: ""
+                property var decorationIcon
+                property bool isActive: false
+                property bool isLauncher: false
+                property bool isWindow: false
+                property bool isStartup: false
+                property bool isDemandingAttention: false
+                property bool isMinimized: false
+                property bool isGroupParent: false
+                property int childCount: 0
+                property string appId: ""
+                property url launcherUrl
+                property int dockEdge: 0
+                property real delegateLogicalSize: 87
+                property real slotScale: 1.0
+                property real bounceOffset: 0.0
+            }
+            )",
+            QUrl()
+        );
+        QVERIFY2(delegateComp.isReady(), qPrintable(delegateComp.errorString()));
+
+        QStandardItemModel source;
+        for (const QString &name : {QStringLiteral("Alpha"), QStringLiteral("Beta"), QStringLiteral("Gamma")}) {
+            source.appendRow(new QStandardItem(name));
+        }
+
+        QSortFilterProxyModel proxy;
+        proxy.setSourceModel(&source);
+        proxy.sort(0, Qt::AscendingOrder);
+
+        DockLayoutItem dock;
+        dock.setBaseIconSize(48.0);
+        dock.setMaxScale(1.8);
+        dock.setSize(QSizeF(800.0, 160.0));
+        dock.setModel(&proxy);
+        dock.setDelegate(&delegateComp);
+
+        QCOMPARE(dock.count(), 3);
+        QQuickItem *alphaItem = dock.itemAtIndex(0);
+        QQuickItem *betaItem = dock.itemAtIndex(1);
+        QQuickItem *gammaItem = dock.itemAtIndex(2);
+        QVERIFY(alphaItem && betaItem && gammaItem);
+        QCOMPARE(alphaItem->property("taskIndex").toInt(), 0);
+        QCOMPARE(gammaItem->property("taskIndex").toInt(), 2);
+
+        // Reverse sort order: QSortFilterProxyModel emits layoutChanged (not rowsMoved),
+        // matching TaskManager::TasksModel::move().
+        proxy.sort(0, Qt::DescendingOrder);
+
+        QCOMPARE(dock.count(), 3);
+        // Exact same delegate instances must be preserved in the new order.
+        QCOMPARE(dock.itemAtIndex(0), gammaItem);
+        QCOMPARE(dock.itemAtIndex(1), betaItem);
+        QCOMPARE(dock.itemAtIndex(2), alphaItem);
+
+        // taskIndex and modelIndex must be updated to match the proxy's new row indices.
+        QCOMPARE(gammaItem->property("taskIndex").toInt(), 0);
+        QCOMPARE(betaItem->property("taskIndex").toInt(), 1);
+        QCOMPARE(alphaItem->property("taskIndex").toInt(), 2);
+
+        const QModelIndex gammaIdx = gammaItem->property("modelIndex").toModelIndex();
+        const QModelIndex alphaIdx = alphaItem->property("modelIndex").toModelIndex();
+        QVERIFY(gammaIdx.isValid());
+        QVERIFY(alphaIdx.isValid());
+        QCOMPARE(gammaIdx.row(), 0);
+        QCOMPARE(alphaIdx.row(), 2);
+        QCOMPARE(proxy.mapToSource(gammaIdx).data().toString(), QStringLiteral("Gamma"));
+        QCOMPARE(proxy.mapToSource(alphaIdx).data().toString(), QStringLiteral("Alpha"));
+    }
+
+    void testImplicitWidthDoesNotCollapseInFitContentPanel() {
+        QQmlEngine engine;
+        QQmlComponent delegateComp(&engine);
+        delegateComp.setData(QByteArrayLiteral("import QtQuick\nItem { property int taskIndex: -1; property var modelIndex }"), QUrl());
+        QVERIFY2(delegateComp.isReady(), qPrintable(delegateComp.errorString()));
+
+        QStandardItemModel model;
+        for (int i = 0; i < 5; ++i) {
+            model.appendRow(new QStandardItem(QStringLiteral("App %1").arg(i)));
+        }
+
+        DockLayoutItem dock;
+        dock.setAutoScaleToPanel(true);
+        dock.setPanelIconRatio(0.65);
+        dock.setMaxZoomPanelRatio(1.0);
+        dock.setIconSpacingRatio(0.15);
+        dock.setClampToContainer(true);
+        dock.setEdgePadding(6.0);
+        dock.setTopMargin(6.0);
+        // Simulate a Fit-Content horizontal Plasma panel starting at minimum width (64 px)
+        // with real panel height (80 px).
+        dock.setSize(QSizeF(64.0, 80.0));
+        dock.setModel(&model);
+        dock.setDelegate(&delegateComp);
+
+        // Available cross = 80 - 12 = 68 px -> baseIconSize = 68 * 0.65 = 44.2 px.
+        // 5 icons + 4 gaps must request > 240 px implicitWidth, NOT stay trapped at ~64 px.
+        QVERIFY2(
+            dock.implicitWidth() > 240.0,
+            qPrintable(QStringLiteral("implicitWidth collapsed to %1").arg(dock.implicitWidth()))
+        );
+
+        // Once the panel expands to the requested implicitWidth, icons render at full proportional size.
+        dock.setSize(QSizeF(dock.implicitWidth(), 80.0));
+        QVERIFY(std::abs(dock.effectiveBaseIconSize() - 44.2) < 0.1);
+    }
+
+    void testRowsMovedFollowedByInvalidatePreservesDraggedDelegateIdentity() {
+        // Mirrors TaskManager::TasksModel::move(), which calls beginMoveRows/endMoveRows
+        // and immediately follows with QSortFilterProxyModel::invalidate() (layoutChanged).
+        class ManualSortProxy : public QSortFilterProxyModel {
+        public:
+            QList<int> order{0, 1, 2, 3, 4};
+
+            void moveRowManual(int from, int to) {
+                const int dest = (to > from) ? (to + 1) : to;
+                beginMoveRows(QModelIndex(), from, from, QModelIndex(), dest);
+                order.move(from, to);
+                endMoveRows();
+                invalidate();
+            }
+
+        protected:
+            bool lessThan(const QModelIndex &left, const QModelIndex &right) const override {
+                return order.indexOf(left.row()) < order.indexOf(right.row());
+            }
+        };
+
+        QQmlEngine engine;
+        QQmlComponent delegateComp(&engine);
+        delegateComp.setData(
+            R"(
+            import QtQuick
+            Item {
+                property int taskIndex: -1
+                property var modelIndex
+                property string displayTitle: ""
+            }
+            )",
+            QUrl()
+        );
+        QVERIFY2(delegateComp.isReady(), qPrintable(delegateComp.errorString()));
+
+        QStandardItemModel source;
+        for (const QString &name : {QStringLiteral("VSCode"), QStringLiteral("Claude"),
+                                    QStringLiteral("Dolphin"), QStringLiteral("Ghostty"),
+                                    QStringLiteral("T3")}) {
+            source.appendRow(new QStandardItem(name));
+        }
+
+        ManualSortProxy proxy;
+        proxy.setSourceModel(&source);
+        proxy.sort(0);
+
+        DockLayoutItem dock;
+        dock.setSize(QSizeF(800.0, 100.0));
+        dock.setModel(&proxy);
+        dock.setDelegate(&delegateComp);
+
+        QQuickItem *t3Item = dock.itemAtIndex(4);
+        QVERIFY(t3Item != nullptr);
+        QCOMPARE(t3Item->property("displayTitle").toString(), QStringLiteral("T3"));
+
+        // Drag T3 from 4 -> 3, then 3 -> 2 (exact sequence from user bug report).
+        proxy.moveRowManual(4, 3);
+        QCOMPARE(dock.itemAtIndex(3), t3Item);
+        QCOMPARE(t3Item->property("taskIndex").toInt(), 3);
+        QCOMPARE(t3Item->property("displayTitle").toString(), QStringLiteral("T3"));
+
+        proxy.moveRowManual(3, 2);
+        QCOMPARE(dock.itemAtIndex(2), t3Item);
+        QCOMPARE(t3Item->property("taskIndex").toInt(), 2);
+        QCOMPARE(t3Item->property("displayTitle").toString(), QStringLiteral("T3"));
+        QCOMPARE(dock.itemAtIndex(3)->property("displayTitle").toString(), QStringLiteral("Dolphin"));
+        QCOMPARE(dock.itemAtIndex(4)->property("displayTitle").toString(), QStringLiteral("Ghostty"));
+    }
+
+    void testPinnedAndUnpinnedOpenCloseLifecycleReconciliation() {
+        // Simulates TaskManager::TasksModel's Launcher <-> Startup <-> Window transitions.
+        class MockTasksModel : public QAbstractListModel {
+        public:
+            enum Roles {
+                AppIdRole = Qt::UserRole + 1,
+                AppNameRole,
+                StorageIdRole,
+                LauncherUrlRole,
+                IsLauncherRole,
+                IsStartupRole,
+                IsWindowRole,
+            };
+
+            struct Row {
+                QString display;
+                QString appId;
+                QString appName;
+                QString storageId;
+                QUrl launcherUrl;
+                bool isLauncher{false};
+                bool isStartup{false};
+                bool isWindow{false};
+            };
+
+            QList<Row> rows;
+
+            int rowCount(const QModelIndex &parent = QModelIndex()) const override {
+                return parent.isValid() ? 0 : static_cast<int>(rows.size());
+            }
+
+            QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override {
+                if (!index.isValid() || index.row() < 0 || index.row() >= rows.size()) {
+                    return {};
+                }
+                const auto &r = rows[index.row()];
+                switch (role) {
+                case Qt::DisplayRole: return r.display;
+                case AppIdRole: return r.appId;
+                case AppNameRole: return r.appName;
+                case StorageIdRole: return r.storageId;
+                case LauncherUrlRole: return r.launcherUrl;
+                case IsLauncherRole: return r.isLauncher;
+                case IsStartupRole: return r.isStartup;
+                case IsWindowRole: return r.isWindow;
+                default: return {};
+                }
+            }
+
+            QHash<int, QByteArray> roleNames() const override {
+                return {
+                    {Qt::DisplayRole, "display"},
+                    {AppIdRole, "AppId"},
+                    {AppNameRole, "AppName"},
+                    {StorageIdRole, "StorageId"},
+                    {LauncherUrlRole, "LauncherUrlWithoutIcon"},
+                    {IsLauncherRole, "IsLauncher"},
+                    {IsStartupRole, "IsStartup"},
+                    {IsWindowRole, "IsWindow"},
+                };
+            }
+
+            void insertTask(int pos, Row r) {
+                beginInsertRows(QModelIndex(), pos, pos);
+                rows.insert(pos, std::move(r));
+                endInsertRows();
+            }
+
+            void removeTask(int pos) {
+                beginRemoveRows(QModelIndex(), pos, pos);
+                rows.removeAt(pos);
+                endRemoveRows();
+            }
+        };
+
+        QQmlEngine engine;
+        QQmlComponent delegateComp(&engine);
+        delegateComp.setData(
+            R"(
+            import QtQuick
+            Item {
+                property int taskIndex: -1
+                property var modelIndex
+                property string displayTitle: ""
+                property bool isLauncher: false
+                property bool isStartup: false
+                property bool isWindow: false
+                property string appId: ""
+                property string appName: ""
+                property url launcherUrl
+            }
+            )",
+            QUrl()
+        );
+        QVERIFY2(delegateComp.isReady(), qPrintable(delegateComp.errorString()));
+
+        MockTasksModel model;
+        model.rows = {
+            {QStringLiteral("Vesktop"), QStringLiteral("vesktop"), QStringLiteral("Vesktop"),
+             QStringLiteral("vesktop.desktop"), QUrl(QStringLiteral("applications:vesktop.desktop")), true, false, false},
+            {QStringLiteral("Dolphin"), QStringLiteral("org.kde.dolphin"), QStringLiteral("Dolphin"),
+             QStringLiteral("org.kde.dolphin.desktop"), QUrl(QStringLiteral("preferred://filemanager")), true, false, false},
+            {QStringLiteral("T3"), QStringLiteral("t3-code"), QStringLiteral("T3"),
+             QStringLiteral("t3-code.desktop"), QUrl(QStringLiteral("applications:t3-code.desktop")), false, false, true},
+        };
+
+        DockLayoutItem dock;
+        dock.setSize(QSizeF(800.0, 100.0));
+        dock.setModel(&model);
+        dock.setDelegate(&delegateComp);
+
+        QCOMPARE(dock.count(), 3);
+        QQuickItem *dolphinItem = dock.itemAtIndex(1);
+        QVERIFY(dolphinItem != nullptr);
+
+        // 1. Launching pinned Dolphin: duplicate Startup row appears at end alongside Launcher.
+        //    Must be suppressed (count stays 3, exact same Dolphin delegate stays in place).
+        model.insertTask(3, {
+            QStringLiteral("Dolphin"), QStringLiteral("org.kde.dolphin"), QStringLiteral("Dolphin"),
+            QStringLiteral("org.kde.dolphin.desktop"), QUrl(QStringLiteral("applications:org.kde.dolphin.desktop")),
+            false, true, false
+        });
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 3);
+        QCOMPARE(dock.itemAtIndex(1), dolphinItem);
+
+        // 2. Startup finishes & real Dolphin Window replaces pinned Launcher in same tick.
+        //    Exact same Dolphin QQuickItem must be reused with zero ghost duplication.
+        model.removeTask(3); // remove Startup
+        model.removeTask(1); // hide Launcher
+        model.insertTask(1, {
+            QStringLiteral("Desktop — Dolphin"), QStringLiteral("org.kde.dolphin"), QStringLiteral("Dolphin"),
+            QStringLiteral("org.kde.dolphin.desktop"), QUrl(QStringLiteral("applications:org.kde.dolphin.desktop")),
+            false, false, true
+        });
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 3);
+        QCOMPARE(dock.itemAtIndex(1), dolphinItem);
+        QCOMPARE(dolphinItem->property("isWindow").toBool(), true);
+        QCOMPARE(dolphinItem->property("isLauncher").toBool(), false);
+
+        // 3. Closing pinned Dolphin: Window removed & Launcher re-inserted in same tick.
+        //    Exact same Dolphin QQuickItem must be reused (zero shrink/slide ghost).
+        model.removeTask(1);
+        model.insertTask(1, {
+            QStringLiteral("Dolphin"), QStringLiteral("org.kde.dolphin"), QStringLiteral("Dolphin"),
+            QStringLiteral("org.kde.dolphin.desktop"), QUrl(QStringLiteral("preferred://filemanager")),
+            true, false, false
+        });
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 3);
+        QCOMPARE(dock.itemAtIndex(1), dolphinItem);
+        QCOMPARE(dolphinItem->property("isLauncher").toBool(), true);
+        QCOMPARE(dolphinItem->property("isWindow").toBool(), false);
+
+        // 4. Opening a genuinely new unpinned app (Startup -> Window -> Close).
+        model.insertTask(3, {
+            QStringLiteral("Ghostty"), QStringLiteral("com.mitchellh.ghostty"), QStringLiteral("Ghostty"),
+            QStringLiteral("com.mitchellh.ghostty.desktop"), QUrl(QStringLiteral("applications:com.mitchellh.ghostty.desktop")),
+            false, true, false
+        });
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 4);
+        QQuickItem *ghosttyItem = dock.itemAtIndex(3);
+        QVERIFY(ghosttyItem != nullptr);
+
+        // Startup -> Window reuses the exact same delegate seamlessly.
+        model.removeTask(3);
+        model.insertTask(3, {
+            QStringLiteral("Ghostty"), QStringLiteral("com.mitchellh.ghostty"), QStringLiteral("Ghostty"),
+            QStringLiteral("com.mitchellh.ghostty.desktop"), QUrl(QStringLiteral("applications:com.mitchellh.ghostty.desktop")),
+            false, false, true
+        });
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 4);
+        QCOMPARE(dock.itemAtIndex(3), ghosttyItem);
+
+        // Closing unpinned Ghostty drops active count to 3 (smooth ghost-out).
+        model.removeTask(3);
+        QCoreApplication::processEvents();
+        QCOMPARE(dock.count(), 3);
     }
 };
 

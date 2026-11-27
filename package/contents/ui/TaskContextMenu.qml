@@ -181,8 +181,7 @@ PlasmaExtras.Menu {
         }
     }
 
-    Component {
-        id: activityPinItemComponent
+    readonly property Component activityPinItemComponent: Component {
         PlasmaExtras.MenuItem {
             property string activityId: ""
             onClicked: {
@@ -211,8 +210,7 @@ PlasmaExtras.Menu {
         }
     }
 
-    Component {
-        id: jumpListItemComponent
+    readonly property Component jumpListItemComponent: Component {
         PlasmaExtras.MenuItem {
             property string actionName: ""
             property url targetUrl
@@ -220,15 +218,13 @@ PlasmaExtras.Menu {
         }
     }
 
-    Component {
-        id: separatorComponent
+    readonly property Component separatorComponent: Component {
         PlasmaExtras.MenuItem {
             separator: true
         }
     }
 
-    Component {
-        id: desktopItemComponent
+    readonly property Component desktopItemComponent: Component {
         PlasmaExtras.MenuItem {
             property var desktopId: ""
             onClicked: {
@@ -307,7 +303,7 @@ PlasmaExtras.Menu {
         icon: menu.isPinned ? "window-unpin" : "pin"
         text: i18n("Pin to Dock")
 
-        PlasmaExtras.Menu {
+        readonly property PlasmaExtras.Menu _activityPinSubMenu: PlasmaExtras.Menu {
             id: activityPinSubMenu
             visualParent: activityPinMenuItem.action
         }
@@ -348,7 +344,7 @@ PlasmaExtras.Menu {
         icon: "virtual-desktops"
         text: i18n("Move to Desktop")
 
-        PlasmaExtras.Menu {
+        readonly property PlasmaExtras.Menu _desktopSubMenu: PlasmaExtras.Menu {
             id: desktopSubMenu
             visualParent: desktopMenuItem.action
         }
@@ -361,7 +357,7 @@ PlasmaExtras.Menu {
         icon: "overflow-menu"
         text: i18n("More")
 
-        PlasmaExtras.Menu {
+        readonly property PlasmaExtras.Menu _moreActionsSubMenu: PlasmaExtras.Menu {
             visualParent: moreActionsItem.action
 
             PlasmaExtras.MenuItem {
