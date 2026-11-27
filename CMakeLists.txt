@@ -255,6 +255,13 @@ if(ECM_FOUND)
         KF6::KIOGui
     )
 
+    if(FLUCTUS_ENABLE_SANITIZERS)
+        # Clang does not link the ASan/UBSan runtime into shared objects (the host executable
+        # provides it), so ECM's -Wl,--no-undefined would fail the plugin link. Re-allow
+        # undefined symbols for the sanitized plugin only; test executables still link the runtime.
+        target_link_options(${FLUCTUS_APPLET_ID} PRIVATE -Wl,-z,undefs)
+    endif()
+
     if(FLUCTUS_USE_PCH)
         target_precompile_headers(${FLUCTUS_APPLET_ID} PRIVATE
             <QAbstractItemModel>
