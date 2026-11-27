@@ -462,6 +462,70 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(dock.count(), 3);
     }
+
+    void testModelChangesDoNotRewriteUnchangedDelegateIcons() {
+        QQmlEngine engine;
+        QQmlComponent delegateComp(&engine);
+        delegateComp.setData(
+            R"(
+            import QtQuick
+            Item {
+                property int taskIndex: -1
+                property var modelIndex
+                property string displayTitle: ""
+                property var decorationIcon
+                property bool isActive: false
+                property real delegateLogicalSize: 87
+                property int iconWrites: 0
+                property int titleWrites: 0
+                onDecorationIconChanged: iconWrites += 1
+                onDisplayTitleChanged: titleWrites += 1
+            }
+            )",
+            QUrl()
+        );
+        QVERIFY2(delegateComp.isReady(), qPrintable(delegateComp.errorString()));
+
+        QPixmap pix(16, 16);
+        pix.fill(Qt::red);
+        const QIcon icon(pix);
+
+        QStandardItemModel model;
+        for (int i = 0; i < 3; ++i) {
+            auto *row = new QStandardItem(QStringLiteral("App %1").arg(i));
+            row->setIcon(icon);
+            model.appendRow(row);
+        }
+
+        DockLayoutItem dock;
+        dock.setSize(QSizeF(800.0, 160.0));
+        dock.setModel(&model);
+        dock.setDelegate(&delegateComp);
+        QCOMPARE(dock.count(), 3);
+
+        QQuickItem *first = dock.itemAtIndex(0);
+        QVERIFY(first != nullptr);
+        const int iconWritesBefore = first->property("iconWrites").toInt();
+        const int titleWritesBefore = first->property("titleWrites").toInt();
+
+        // An app opening inserts a row; untouched delegates must not see their icon re-assigned
+        // (that made every Kirigami.Icon reload and the whole dock flicker).
+        auto *opened = new QStandardItem(QStringLiteral("Opened"));
+        opened->setIcon(icon);
+        model.appendRow(opened);
+        QCOMPARE(dock.count(), 4);
+        model.item(1)->setText(QStringLiteral("Renamed"));
+
+        QCOMPARE(first->property("iconWrites").toInt(), iconWritesBefore);
+        QCOMPARE(first->property("titleWrites").toInt(), titleWritesBefore);
+        QCOMPARE(dock.itemAtIndex(1)->property("displayTitle").toString(), QStringLiteral("Renamed"));
+
+        // A genuinely new icon still propagates.
+        QPixmap pix2(16, 16);
+        pix2.fill(Qt::blue);
+        model.item(0)->setIcon(QIcon(pix2));
+        QCOMPARE(first->property("iconWrites").toInt(), iconWritesBefore + 1);
+    }
 };
 
 QTEST_MAIN(DockLayoutItemTest)

@@ -20,9 +20,13 @@ PlasmaCore.Dialog {
     property var groupIcon
     property int groupCount: 0
 
+    // Counted via a dedicated DelegateModel: childDelegateModel only reports a non-zero count
+    // once a Repeater adopts it, and which Repeater adopts it depends on usePreviewCards,
+    // so deriving usePreviewCards from childDelegateModel.count is a binding loop.
+    readonly property int childWindowCount: childCounter.count
     readonly property bool usePreviewCards: Plasmoid.configuration.showWindowPreviews
-        && childDelegateModel.count > 0
-        && childDelegateModel.count <= 5
+        && childWindowCount > 0
+        && childWindowCount <= 5
 
     type: PlasmaCore.Dialog.PopupMenu
     flags: Qt.WindowStaysOnTopHint
@@ -59,16 +63,24 @@ PlasmaCore.Dialog {
         return title;
     }
 
-    readonly property DelegateModel _childModel: DelegateModel {
-        id: childDelegateModel
+    readonly property DelegateModel _childCounter: DelegateModel {
+        id: childCounter
         model: groupDialog.tasksModelRef
         rootIndex: groupDialog.parentModelIndex
+        // Never instantiated (no view); only lets the model report its row count.
+        delegate: QtObject {}
 
         onCountChanged: {
             if (groupDialog.visible && count <= 1) {
                 groupDialog.visible = false;
             }
         }
+    }
+
+    readonly property DelegateModel _childModel: DelegateModel {
+        id: childDelegateModel
+        model: groupDialog.tasksModelRef
+        rootIndex: groupDialog.parentModelIndex
     }
 
     mainItem: Item {
@@ -105,7 +117,7 @@ PlasmaCore.Dialog {
                 }
 
                 PlasmaComponents3.Label {
-                    text: i18np("%1 window", "%1 windows", childDelegateModel.count > 0 ? childDelegateModel.count : groupDialog.groupCount)
+                    text: i18np("%1 window", "%1 windows", groupDialog.childWindowCount > 0 ? groupDialog.childWindowCount : groupDialog.groupCount)
                     opacity: 0.65
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                 }

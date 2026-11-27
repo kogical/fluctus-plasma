@@ -1,5 +1,6 @@
 #include "quick/DockLayoutItem.hpp"
 
+#include <QIcon>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWindow>
@@ -14,6 +15,36 @@ namespace {
 
 [[nodiscard]] QRectF toQRectF(const core::Rect &r) noexcept {
     return QRectF{r.x, r.y, r.width, r.height};
+}
+
+[[nodiscard]] bool sameIcon(const QIcon &a, const QIcon &b) {
+    if (a.isNull() || b.isNull()) {
+        return a.isNull() == b.isNull();
+    }
+    if (a.cacheKey() == b.cacheKey()) {
+        return true;
+    }
+    // Themed icons re-created per data() call get fresh cache keys; same theme name == same icon.
+    return !a.name().isEmpty() && a.name() == b.name();
+}
+
+[[nodiscard]] bool sameVariant(const QVariant &current, const QVariant &next) {
+    if (current.metaType() == QMetaType::fromType<QIcon>() && next.metaType() == QMetaType::fromType<QIcon>()) {
+        return sameIcon(current.value<QIcon>(), next.value<QIcon>());
+    }
+    if (current.metaType() != next.metaType()) {
+        return false;
+    }
+    return current == next;
+}
+
+// Writing an unchanged value to a QML `var` property still emits its change signal
+// (QIcon has no QVariant equality), which makes every Kirigami.Icon reload its source and
+// flicker whenever the task model changes (e.g. while an app is starting). Only write deltas.
+void setPropertyIfChanged(QObject *obj, const char *name, const QVariant &value) {
+    if (!sameVariant(obj->property(name), value)) {
+        obj->setProperty(name, value);
+    }
 }
 
 } // namespace
@@ -1159,44 +1190,44 @@ void DockLayoutItem::syncDelegateProperties(ManagedDelegate &entry, int activeIn
         return v.isValid() ? v : fallback;
     };
 
-    entry.item->setProperty("taskIndex", activeIndex);
-    entry.item->setProperty("modelIndex", QVariant::fromValue(idx));
-    entry.item->setProperty("displayTitle", m_model->data(idx, Qt::DisplayRole).toString());
-    entry.item->setProperty("decorationIcon", m_model->data(idx, Qt::DecorationRole));
-    entry.item->setProperty("isActive", readRole(QByteArrayLiteral("IsActive"), false).toBool());
+    setPropertyIfChanged(entry.item, "taskIndex", activeIndex);
+    setPropertyIfChanged(entry.item, "modelIndex", QVariant::fromValue(idx));
+    setPropertyIfChanged(entry.item, "displayTitle", m_model->data(idx, Qt::DisplayRole).toString());
+    setPropertyIfChanged(entry.item, "decorationIcon", m_model->data(idx, Qt::DecorationRole));
+    setPropertyIfChanged(entry.item, "isActive", readRole(QByteArrayLiteral("IsActive"), false).toBool());
     const bool launcher = readRole(QByteArrayLiteral("IsLauncher"), false).toBool();
     entry.isLauncher = launcher;
-    entry.item->setProperty("isLauncher", launcher);
-    entry.item->setProperty("isWindow", readRole(QByteArrayLiteral("IsWindow"), false).toBool());
+    setPropertyIfChanged(entry.item, "isLauncher", launcher);
+    setPropertyIfChanged(entry.item, "isWindow", readRole(QByteArrayLiteral("IsWindow"), false).toBool());
     const bool startup = readRole(QByteArrayLiteral("IsStartup"), false).toBool();
     entry.isStartup = startup;
-    entry.item->setProperty("isStartup", startup);
-    entry.item->setProperty("isDemandingAttention", readRole(QByteArrayLiteral("IsDemandingAttention"), false).toBool());
-    entry.item->setProperty("isMinimized", readRole(QByteArrayLiteral("IsMinimized"), false).toBool());
-    entry.item->setProperty("isMaximized", readRole(QByteArrayLiteral("IsMaximized"), false).toBool());
-    entry.item->setProperty("isFullScreen", readRole(QByteArrayLiteral("IsFullScreen"), false).toBool());
-    entry.item->setProperty("isKeepAbove", readRole(QByteArrayLiteral("IsKeepAbove"), false).toBool());
-    entry.item->setProperty("isKeepBelow", readRole(QByteArrayLiteral("IsKeepBelow"), false).toBool());
-    entry.item->setProperty("isClosable", readRole(QByteArrayLiteral("IsClosable"), true).toBool());
-    entry.item->setProperty("isMinimizable", readRole(QByteArrayLiteral("IsMinimizable"), true).toBool());
-    entry.item->setProperty("isMaximizable", readRole(QByteArrayLiteral("IsMaximizable"), true).toBool());
-    entry.item->setProperty("isMovable", readRole(QByteArrayLiteral("IsMovable"), true).toBool());
-    entry.item->setProperty("isResizable", readRole(QByteArrayLiteral("IsResizable"), true).toBool());
-    entry.item->setProperty("isFullScreenable", readRole(QByteArrayLiteral("IsFullScreenable"), true).toBool());
-    entry.item->setProperty("isOnAllVirtualDesktops", readRole(QByteArrayLiteral("IsOnAllVirtualDesktops"), false).toBool());
-    entry.item->setProperty("virtualDesktops", readRole(QByteArrayLiteral("VirtualDesktops"), QVariantList()));
-    entry.item->setProperty("winIdList", readRole(QByteArrayLiteral("WinIdList"), QVariantList()));
-    entry.item->setProperty("isGroupParent", readRole(QByteArrayLiteral("IsGroupParent"), false).toBool());
-    entry.item->setProperty("childCount", readRole(QByteArrayLiteral("ChildCount"), 0).toInt());
+    setPropertyIfChanged(entry.item, "isStartup", startup);
+    setPropertyIfChanged(entry.item, "isDemandingAttention", readRole(QByteArrayLiteral("IsDemandingAttention"), false).toBool());
+    setPropertyIfChanged(entry.item, "isMinimized", readRole(QByteArrayLiteral("IsMinimized"), false).toBool());
+    setPropertyIfChanged(entry.item, "isMaximized", readRole(QByteArrayLiteral("IsMaximized"), false).toBool());
+    setPropertyIfChanged(entry.item, "isFullScreen", readRole(QByteArrayLiteral("IsFullScreen"), false).toBool());
+    setPropertyIfChanged(entry.item, "isKeepAbove", readRole(QByteArrayLiteral("IsKeepAbove"), false).toBool());
+    setPropertyIfChanged(entry.item, "isKeepBelow", readRole(QByteArrayLiteral("IsKeepBelow"), false).toBool());
+    setPropertyIfChanged(entry.item, "isClosable", readRole(QByteArrayLiteral("IsClosable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isMinimizable", readRole(QByteArrayLiteral("IsMinimizable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isMaximizable", readRole(QByteArrayLiteral("IsMaximizable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isMovable", readRole(QByteArrayLiteral("IsMovable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isResizable", readRole(QByteArrayLiteral("IsResizable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isFullScreenable", readRole(QByteArrayLiteral("IsFullScreenable"), true).toBool());
+    setPropertyIfChanged(entry.item, "isOnAllVirtualDesktops", readRole(QByteArrayLiteral("IsOnAllVirtualDesktops"), false).toBool());
+    setPropertyIfChanged(entry.item, "virtualDesktops", readRole(QByteArrayLiteral("VirtualDesktops"), QVariantList()));
+    setPropertyIfChanged(entry.item, "winIdList", readRole(QByteArrayLiteral("WinIdList"), QVariantList()));
+    setPropertyIfChanged(entry.item, "isGroupParent", readRole(QByteArrayLiteral("IsGroupParent"), false).toBool());
+    setPropertyIfChanged(entry.item, "childCount", readRole(QByteArrayLiteral("ChildCount"), 0).toInt());
     const QString appId = readRole(QByteArrayLiteral("AppId"), QString()).toString();
-    entry.item->setProperty("appId", appId);
-    entry.item->setProperty("appName", readRole(QByteArrayLiteral("AppName"), QString()).toString());
-    entry.item->setProperty("appPid", readRole(QByteArrayLiteral("AppPid"), 0).toInt());
+    setPropertyIfChanged(entry.item, "appId", appId);
+    setPropertyIfChanged(entry.item, "appName", readRole(QByteArrayLiteral("AppName"), QString()).toString());
+    setPropertyIfChanged(entry.item, "appPid", readRole(QByteArrayLiteral("AppPid"), 0).toInt());
     const QUrl launcherUrl = readRole(QByteArrayLiteral("LauncherUrlWithoutIcon"), QUrl()).toUrl();
-    entry.item->setProperty("launcherUrl", launcherUrl);
-    entry.item->setProperty("launcherUrlFull", readRole(QByteArrayLiteral("LauncherUrl"), QUrl()));
-    entry.item->setProperty("dockEdge", static_cast<int>(m_config.axis.edge));
-    entry.item->setProperty("delegateLogicalSize", m_engine.effectiveDelegateLogicalSize(width(), height()));
+    setPropertyIfChanged(entry.item, "launcherUrl", launcherUrl);
+    setPropertyIfChanged(entry.item, "launcherUrlFull", readRole(QByteArrayLiteral("LauncherUrl"), QUrl()));
+    setPropertyIfChanged(entry.item, "dockEdge", static_cast<int>(m_config.axis.edge));
+    setPropertyIfChanged(entry.item, "delegateLogicalSize", m_engine.effectiveDelegateLogicalSize(width(), height()));
     entry.identity = readTaskIdentity(idx.row());
 }
 
@@ -1208,8 +1239,8 @@ void DockLayoutItem::syncAllDelegateSizesAndOrigins() {
         if (entry.item) {
             entry.item->setSize(QSizeF(delSize, delSize));
             entry.item->setTransformOrigin(origin);
-            entry.item->setProperty("dockEdge", static_cast<int>(m_config.axis.edge));
-            entry.item->setProperty("delegateLogicalSize", delSize);
+            setPropertyIfChanged(entry.item, "dockEdge", static_cast<int>(m_config.axis.edge));
+            setPropertyIfChanged(entry.item, "delegateLogicalSize", delSize);
         }
     }
 }
