@@ -256,6 +256,80 @@ private Q_SLOTS:
             QVERIFY(reversed.items[0].primaryCenter > reversed.items[3].primaryCenter);
         }
     }
+
+    void testPanelAutoScalingAndContainerClamping() {
+        DockPhysicsEngine engine{};
+        DockConfig cfg{};
+        cfg.baseIconSize = 48.0;
+        cfg.iconSpacing = 6.0;
+        cfg.maxScale = 1.8;
+        cfg.edgePadding = 4.0;
+        cfg.topMargin = 4.0;
+        cfg.autoScaleToPanel = true;
+        cfg.clampToContainer = true;
+        engine.setConfig(cfg);
+
+        for (std::size_t i = 0; i < 6; ++i) {
+            engine.insertSlot(i, false);
+        }
+
+        // Compact 48 px Plasma panel: effective icon size & zoom must fit inside 40 px available cross-axis.
+        const double smallH = 48.0;
+        const double smallBase = engine.effectiveBaseIconSize(800.0, smallH);
+        const double smallMax = engine.effectiveMaxScaleForContainer(800.0, smallH);
+        QVERIFY(smallBase >= 20.0 && smallBase <= 40.0);
+        QVERIFY(smallBase * smallMax <= (smallH - cfg.edgePadding - cfg.topMargin) + 1e-6);
+
+        // Tall 120 px Plasma panel: effective base icon size scales up proportionally with panel height.
+        const double tallH = 120.0;
+        const double tallBase = engine.effectiveBaseIconSize(800.0, tallH);
+        QVERIFY(tallBase > smallBase);
+
+        // Narrow primary container: icons compress smoothly so pill never overflows container width.
+        const double narrowW = 180.0;
+        const DockFrame narrowFrame = engine.computeFrame(narrowW, 80.0);
+        QVERIFY(narrowFrame.pillRect.width <= narrowW + 1e-6);
+    }
+
+    void testSmoothSpringReorderAndInsertionIndicator() {
+        DockPhysicsEngine engine{};
+        DockConfig cfg{};
+        cfg.baseIconSize = 48.0;
+        cfg.iconSpacing = 6.0;
+        cfg.maxScale = 1.6;
+        engine.setConfig(cfg);
+
+        for (std::size_t i = 0; i < 4; ++i) {
+            engine.insertSlot(i, false);
+        }
+
+        const double W = 800.0;
+        const double H = 160.0;
+        const DockFrame before = engine.computeFrame(W, H);
+        const double oldSlot0Center = before.items[0].primaryCenter;
+        const double oldSlot2Center = before.items[2].primaryCenter;
+
+        // Move slot 0 -> index 2: engine should become unsettled and glide smoothly from old position!
+        engine.moveSlot(0, 2);
+        QVERIFY(!engine.isSettled());
+
+        const DockFrame rightAfterMove = engine.computeFrame(W, H);
+        // Right after move (t=0), the moved slot starts at its old center (zero teleport!).
+        QVERIFY(std::abs(rightAfterMove.items[2].primaryCenter - oldSlot0Center) < 1.0);
+
+        // After stepping 2 seconds, all reorder springs settle cleanly at exact resting positions.
+        for (int i = 0; i < 120; ++i) {
+            engine.step(1.0 / 60.0, W, H);
+        }
+        QVERIFY(engine.isSettled());
+        const DockFrame settled = engine.computeFrame(W, H);
+        QVERIFY(std::abs(settled.items[2].primaryCenter - oldSlot2Center) < 1.0);
+
+        // Insertion indicator rect must have valid non-zero geometry inside the container.
+        const Rect ind = engine.insertionIndicatorRect(2, W, H);
+        QVERIFY(ind.width > 0.0 && ind.height > 0.0);
+        QVERIFY(ind.x >= 0.0 && ind.x + ind.width <= W);
+    }
 };
 
 QTEST_MAIN(DockPhysicsTest)

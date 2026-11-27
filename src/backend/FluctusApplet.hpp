@@ -2,12 +2,15 @@
 
 #include <Plasma/Applet>
 #include <QRect>
+#include <QUrl>
+#include <QVariantList>
+#include <QVariantMap>
 
 namespace fluctus::backend {
 
 /// Compiled Plasma::Applet entry point for Fluctus Plasma.
 /// Exposes clean C++ helpers to the thin QML shell (headroom math, attention status,
-/// screen geometry tracking, and global shortcut routing).
+/// screen geometry tracking, SmartLauncher badges, Jump List actions, and global shortcuts).
 class FluctusApplet final : public Plasma::Applet {
     Q_OBJECT
 
@@ -29,9 +32,14 @@ public:
         qreal topMargin
     ) const;
 
+    Q_INVOKABLE QVariantMap smartLauncherState(const QString &appId, const QUrl &launcherUrl) const;
+    Q_INVOKABLE QVariantList jumpListActions(const QUrl &launcherUrl) const;
+    Q_INVOKABLE bool triggerJumpListAction(const QUrl &launcherUrl, const QString &actionName) const;
+
 Q_SIGNALS:
     void screenGeometryChanged();
     void activateTaskRequested(int index);
+    void smartLauncherUpdated(const QString &normalizedAppId);
 
 private:
     QRect m_screenGeometry;

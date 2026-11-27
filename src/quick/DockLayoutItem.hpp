@@ -39,7 +39,10 @@ class DockLayoutItem : public QQuickItem {
     Q_PROPERTY(qreal bounceRatio READ bounceRatio WRITE setBounceRatio NOTIFY configChanged)
     Q_PROPERTY(bool magnificationEnabled READ magnificationEnabled WRITE setMagnificationEnabled NOTIFY configChanged)
     Q_PROPERTY(bool editModeFrozen READ editModeFrozen WRITE setEditModeFrozen NOTIFY configChanged)
+    Q_PROPERTY(bool autoScaleToPanel READ autoScaleToPanel WRITE setAutoScaleToPanel NOTIFY configChanged)
+    Q_PROPERTY(bool clampToContainer READ clampToContainer WRITE setClampToContainer NOTIFY configChanged)
     Q_PROPERTY(bool blurEnabled READ blurEnabled WRITE setBlurEnabled NOTIFY blurConfigChanged)
+    Q_PROPERTY(int blurStyle READ blurStyle WRITE setBlurStyle NOTIFY blurConfigChanged)
     Q_PROPERTY(qreal pillCornerRadius READ pillCornerRadius WRITE setPillCornerRadius NOTIFY blurConfigChanged)
     Q_PROPERTY(qreal edgePadding READ edgePadding WRITE setEdgePadding NOTIFY configChanged)
     Q_PROPERTY(qreal pillPaddingPrimary READ pillPaddingPrimary WRITE setPillPaddingPrimary NOTIFY configChanged)
@@ -51,6 +54,7 @@ class DockLayoutItem : public QQuickItem {
     Q_PROPERTY(int recommendedPanelThickness READ recommendedPanelThickness NOTIFY configChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(qreal delegateLogicalSize READ delegateLogicalSize NOTIFY configChanged)
+    Q_PROPERTY(qreal effectiveBaseIconSize READ effectiveBaseIconSize NOTIFY configChanged)
     Q_PROPERTY(bool hasAttentionTask READ hasAttentionTask NOTIFY hasAttentionTaskChanged)
 
 public:
@@ -96,8 +100,17 @@ public:
     [[nodiscard]] bool editModeFrozen() const noexcept { return m_config.editModeFrozen; }
     void setEditModeFrozen(bool frozen);
 
+    [[nodiscard]] bool autoScaleToPanel() const noexcept { return m_config.autoScaleToPanel; }
+    void setAutoScaleToPanel(bool enabled);
+
+    [[nodiscard]] bool clampToContainer() const noexcept { return m_config.clampToContainer; }
+    void setClampToContainer(bool enabled);
+
     [[nodiscard]] bool blurEnabled() const noexcept { return m_blurEnabled; }
     void setBlurEnabled(bool enabled);
+
+    [[nodiscard]] int blurStyle() const noexcept { return m_blurStyle; }
+    void setBlurStyle(int style);
 
     [[nodiscard]] qreal pillCornerRadius() const noexcept { return m_pillCornerRadius; }
     void setPillCornerRadius(qreal radius);
@@ -118,12 +131,18 @@ public:
     [[nodiscard]] qreal hoverAlpha() const noexcept { return m_hoverAlpha; }
     [[nodiscard]] int recommendedPanelThickness() const noexcept { return m_config.recommendedPanelThickness(); }
     [[nodiscard]] int count() const noexcept { return static_cast<int>(m_engine.activeSlotCount()); }
-    [[nodiscard]] qreal delegateLogicalSize() const noexcept { return m_config.delegateLogicalSize(); }
+    [[nodiscard]] qreal delegateLogicalSize() const noexcept {
+        return m_engine.effectiveDelegateLogicalSize(width(), height());
+    }
+    [[nodiscard]] qreal effectiveBaseIconSize() const noexcept {
+        return m_engine.effectiveBaseIconSize(width(), height());
+    }
     [[nodiscard]] bool hasAttentionTask() const noexcept { return m_hasAttentionTask; }
 
     Q_INVOKABLE void updatePointer(qreal x, qreal y);
     Q_INVOKABLE void clearPointer();
     Q_INVOKABLE int restingInsertionIndex(qreal x, qreal y) const;
+    Q_INVOKABLE QRectF insertionIndicatorRect(int insertionIndex) const;
     Q_INVOKABLE QQuickItem *itemAtIndex(int activeIndex) const;
     Q_INVOKABLE void reapplyBlur();
     Q_INVOKABLE void publishDelegateGeometries();
@@ -196,6 +215,7 @@ private:
     QRectF m_pillRect;
     qreal m_hoverAlpha{0.0};
     bool m_blurEnabled{true};
+    int m_blurStyle{0};
     qreal m_pillCornerRadius{16.0};
     bool m_hasAttentionTask{false};
 };

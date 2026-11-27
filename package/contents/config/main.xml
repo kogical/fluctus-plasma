@@ -6,14 +6,75 @@
     <kcfgfile name=""/>
 
     <group name="General">
+        <!-- Sizing & Panel Fit -->
+        <entry name="autoScaleToPanel" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="baseIconSize" type="Int">
             <default>48</default>
         </entry>
         <entry name="iconSpacing" type="Int">
             <default>6</default>
         </entry>
+        <entry name="edgePadding" type="Int">
+            <default>6</default>
+        </entry>
+        <entry name="topMargin" type="Int">
+            <default>6</default>
+        </entry>
+
+        <!-- Background & Pill Surface -->
+        <!-- 0: Default (Panel / Panel Colorizer), 1: Custom Glass Pill, 2: Plasma Theme Surface, 3: Transparent -->
+        <entry name="backgroundMode" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- 0: Frosted Glass, 1: Liquid Glass, 2: Acrylic, 3: Clear Blur, 4: Solid (No Blur) -->
+        <entry name="blurStyle" type="Int">
+            <default>1</default>
+        </entry>
+        <entry name="blurEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <!-- 0: Plasma Theme Color, 1: Custom Color -->
+        <entry name="pillColorMode" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="pillCustomColor" type="Color">
+            <default>#1e1e2e</default>
+        </entry>
+        <entry name="pillCornerRadius" type="Int">
+            <default>18</default>
+        </entry>
+        <entry name="pillOpacity" type="Double">
+            <default>0.62</default>
+        </entry>
+        <entry name="pillBorderWidth" type="Int">
+            <default>1</default>
+        </entry>
+        <entry name="pillBorderOpacity" type="Double">
+            <default>0.22</default>
+        </entry>
+        <entry name="pillPaddingPrimary" type="Int">
+            <default>10</default>
+        </entry>
+        <entry name="pillPaddingCross" type="Int">
+            <default>6</default>
+        </entry>
+        <entry name="showReflection" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- 0: Pill Bar, 1: Classic Dot, 2: Glowing Underline, 3: Minimal Line, 4: None -->
+        <entry name="indicatorStyle" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- 0: Screen Edge, 1: Inside Icon -->
+        <entry name="indicatorPosition" type="Int">
+            <default>0</default>
+        </entry>
+
+        <!-- Physics & Animation -->
         <entry name="maxScale" type="Double">
-            <default>1.8</default>
+            <default>1.6</default>
         </entry>
         <entry name="influenceRadiusIcons" type="Double">
             <default>2.5</default>
@@ -30,20 +91,19 @@
         <entry name="bounceRatio" type="Double">
             <default>0.55</default>
         </entry>
-        <entry name="blurEnabled" type="Bool">
+
+        <!-- Behavior & Tooltips -->
+        <entry name="showTooltips" type="Bool">
             <default>true</default>
         </entry>
-        <entry name="pillCornerRadius" type="Int">
-            <default>18</default>
+        <entry name="showWindowPreviews" type="Bool">
+            <default>true</default>
         </entry>
-        <entry name="pillOpacity" type="Double">
-            <default>0.72</default>
+        <entry name="indicateAudioStreams" type="Bool">
+            <default>true</default>
         </entry>
-        <entry name="edgePadding" type="Int">
-            <default>6</default>
-        </entry>
-        <entry name="topMargin" type="Int">
-            <default>6</default>
+        <entry name="dragOffToUnpin" type="Bool">
+            <default>true</default>
         </entry>
         <entry name="reverseMode" type="Bool">
             <default>false</default>

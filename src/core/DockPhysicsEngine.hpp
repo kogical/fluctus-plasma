@@ -30,6 +30,8 @@ struct DockConfig {
     bool bounceEnabled{true};
     bool magnificationEnabled{true};
     bool editModeFrozen{false};
+    bool autoScaleToPanel{false};
+    bool clampToContainer{true};
     AxisGeometry axis{};
 
     [[nodiscard]] double pitch() const noexcept {
@@ -126,6 +128,14 @@ public:
         double containerHeight
     ) const noexcept;
 
+    /// Compute a thin indicator rect at the resting insertion boundary `insertionIndex`
+    /// for rendering a visual drop/reorder guide.
+    [[nodiscard]] Rect insertionIndicatorRect(
+        std::size_t insertionIndex,
+        double containerWidth,
+        double containerHeight
+    ) const noexcept;
+
     /// Advance springs and bounce physics by `dt` seconds.
     /// Returns true if any visual state changed or animations are still active.
     bool step(double dt, double containerWidth, double containerHeight);
@@ -139,17 +149,39 @@ public:
     /// Evaluate the continuous resting-space density integral X(r) at canonical coordinate r.
     [[nodiscard]] double mapCanonicalCoordinate(double r, double pointerCanonical, double alpha) const noexcept;
 
+    /// Effective icon base size and delegate logical size for a given container size
+    /// (accounts for autoScaleToPanel and panel cross/primary clamping).
+    [[nodiscard]] double effectiveBaseIconSize(double containerWidth, double containerHeight) const noexcept;
+    [[nodiscard]] double effectiveMaxScaleForContainer(double containerWidth, double containerHeight) const noexcept;
+    [[nodiscard]] double effectiveDelegateLogicalSize(double containerWidth, double containerHeight) const noexcept;
+
 private:
+    struct ResolvedMetrics {
+        double baseIconSize{48.0};
+        double iconSpacing{6.0};
+        double maxScale{1.8};
+        double influenceRadius{135.0};
+        double delegateLogicalSize{87.0};
+    };
+
     struct InternalSlot {
         std::uint64_t id{0};
         bool ghost{false};
         DampedSpring weightSpring{};
+        DampedSpring reorderOffsetSpring{};
         BounceState bounce{};
     };
 
-    [[nodiscard]] double computeRestingLength() const noexcept;
+    [[nodiscard]] ResolvedMetrics resolveMetrics(double containerWidth, double containerHeight) const noexcept;
+    [[nodiscard]] double mapCanonicalCoordinateWith(
+        double r,
+        double pointerCanonical,
+        double alpha,
+        const ResolvedMetrics &metrics
+    ) const noexcept;
+    [[nodiscard]] double computeRestingLength(const ResolvedMetrics &metrics) const noexcept;
     [[nodiscard]] double dockOriginPrimary(double containerPrimary, double restingLength) const noexcept;
-    [[nodiscard]] double availableBounceHeadroom(double containerCross) const noexcept;
+    [[nodiscard]] double availableBounceHeadroom(double containerCross, const ResolvedMetrics &metrics) const noexcept;
     [[nodiscard]] std::size_t findActiveInternalIndex(std::size_t activeIndex) const noexcept;
 
     DockConfig m_config{};

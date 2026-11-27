@@ -229,12 +229,46 @@ void DockLayoutItem::setEditModeFrozen(bool frozen) {
     Q_EMIT configChanged();
 }
 
+void DockLayoutItem::setAutoScaleToPanel(bool enabled) {
+    if (m_config.autoScaleToPanel == enabled) {
+        return;
+    }
+    m_config.autoScaleToPanel = enabled;
+    m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
+    Q_EMIT configChanged();
+}
+
+void DockLayoutItem::setClampToContainer(bool enabled) {
+    if (m_config.clampToContainer == enabled) {
+        return;
+    }
+    m_config.clampToContainer = enabled;
+    m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
+    Q_EMIT configChanged();
+}
+
 void DockLayoutItem::setBlurEnabled(bool enabled) {
     if (m_blurEnabled == enabled) {
         return;
     }
     m_blurEnabled = enabled;
     m_blurController->setEnabled(enabled);
+    Q_EMIT blurConfigChanged();
+}
+
+void DockLayoutItem::setBlurStyle(int style) {
+    const int clamped = std::clamp(style, 0, 4);
+    if (m_blurStyle == clamped) {
+        return;
+    }
+    m_blurStyle = clamped;
+    m_blurController->setBlurStyle(clamped);
     Q_EMIT blurConfigChanged();
 }
 
@@ -309,6 +343,11 @@ int DockLayoutItem::restingInsertionIndex(qreal x, qreal y) const {
     return static_cast<int>(m_engine.restingInsertionIndex(core::Vec2{x, y}, width(), height()));
 }
 
+QRectF DockLayoutItem::insertionIndicatorRect(int insertionIndex) const {
+    const auto idx = static_cast<std::size_t>(std::max(0, insertionIndex));
+    return toQRectF(m_engine.insertionIndicatorRect(idx, width(), height()));
+}
+
 QQuickItem *DockLayoutItem::itemAtIndex(int activeIndex) const {
     if (activeIndex < 0) {
         return nullptr;
@@ -376,7 +415,10 @@ void DockLayoutItem::componentComplete() {
 void DockLayoutItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() != oldGeometry.size()) {
+        syncAllDelegateSizesAndOrigins();
+        updateStructuralImplicitSize();
         polish();
+        Q_EMIT configChanged();
     }
 }
 
@@ -537,6 +579,9 @@ void DockLayoutItem::onRowsMoved(
     }
 
     polish();
+    if (!m_engine.isSettled()) {
+        m_driver->ensureRunning();
+    }
 }
 
 void DockLayoutItem::onDataChanged(
@@ -640,7 +685,7 @@ QQuickItem *DockLayoutItem::createDelegateForRow(int row, std::uint64_t slotId) 
     }
 
     item->setParentItem(this);
-    const double delSize = m_config.delegateLogicalSize();
+    const double delSize = m_engine.effectiveDelegateLogicalSize(width(), height());
     item->setSize(QSizeF(delSize, delSize));
     item->setTransformOrigin(transformOriginForEdge());
 
@@ -678,16 +723,32 @@ void DockLayoutItem::syncDelegateProperties(ManagedDelegate &entry, int activeIn
     entry.item->setProperty("isStartup", readRole(QByteArrayLiteral("IsStartup"), false).toBool());
     entry.item->setProperty("isDemandingAttention", readRole(QByteArrayLiteral("IsDemandingAttention"), false).toBool());
     entry.item->setProperty("isMinimized", readRole(QByteArrayLiteral("IsMinimized"), false).toBool());
+    entry.item->setProperty("isMaximized", readRole(QByteArrayLiteral("IsMaximized"), false).toBool());
+    entry.item->setProperty("isFullScreen", readRole(QByteArrayLiteral("IsFullScreen"), false).toBool());
+    entry.item->setProperty("isKeepAbove", readRole(QByteArrayLiteral("IsKeepAbove"), false).toBool());
+    entry.item->setProperty("isKeepBelow", readRole(QByteArrayLiteral("IsKeepBelow"), false).toBool());
+    entry.item->setProperty("isClosable", readRole(QByteArrayLiteral("IsClosable"), true).toBool());
+    entry.item->setProperty("isMinimizable", readRole(QByteArrayLiteral("IsMinimizable"), true).toBool());
+    entry.item->setProperty("isMaximizable", readRole(QByteArrayLiteral("IsMaximizable"), true).toBool());
+    entry.item->setProperty("isMovable", readRole(QByteArrayLiteral("IsMovable"), true).toBool());
+    entry.item->setProperty("isResizable", readRole(QByteArrayLiteral("IsResizable"), true).toBool());
+    entry.item->setProperty("isFullScreenable", readRole(QByteArrayLiteral("IsFullScreenable"), true).toBool());
+    entry.item->setProperty("isOnAllVirtualDesktops", readRole(QByteArrayLiteral("IsOnAllVirtualDesktops"), false).toBool());
+    entry.item->setProperty("virtualDesktops", readRole(QByteArrayLiteral("VirtualDesktops"), QVariantList()));
+    entry.item->setProperty("winIdList", readRole(QByteArrayLiteral("WinIdList"), QVariantList()));
     entry.item->setProperty("isGroupParent", readRole(QByteArrayLiteral("IsGroupParent"), false).toBool());
     entry.item->setProperty("childCount", readRole(QByteArrayLiteral("ChildCount"), 0).toInt());
     entry.item->setProperty("appId", readRole(QByteArrayLiteral("AppId"), QString()).toString());
+    entry.item->setProperty("appName", readRole(QByteArrayLiteral("AppName"), QString()).toString());
+    entry.item->setProperty("appPid", readRole(QByteArrayLiteral("AppPid"), 0).toInt());
     entry.item->setProperty("launcherUrl", readRole(QByteArrayLiteral("LauncherUrlWithoutIcon"), QUrl()));
+    entry.item->setProperty("launcherUrlFull", readRole(QByteArrayLiteral("LauncherUrl"), QUrl()));
     entry.item->setProperty("dockEdge", static_cast<int>(m_config.axis.edge));
-    entry.item->setProperty("delegateLogicalSize", m_config.delegateLogicalSize());
+    entry.item->setProperty("delegateLogicalSize", m_engine.effectiveDelegateLogicalSize(width(), height()));
 }
 
 void DockLayoutItem::syncAllDelegateSizesAndOrigins() {
-    const double delSize = m_config.delegateLogicalSize();
+    const double delSize = m_engine.effectiveDelegateLogicalSize(width(), height());
     const QQuickItem::TransformOrigin origin = transformOriginForEdge();
     for (auto &entry : m_delegates) {
         if (entry.item) {
@@ -701,12 +762,16 @@ void DockLayoutItem::syncAllDelegateSizesAndOrigins() {
 
 void DockLayoutItem::updateStructuralImplicitSize() {
     const std::size_t n = m_engine.activeSlotCount();
+    const double effBase = m_engine.effectiveBaseIconSize(width(), height());
+    const double effMax = m_engine.effectiveMaxScaleForContainer(width(), height());
+    const double effRadius = std::max(1.0, m_config.influenceRadiusIcons * (effBase + m_config.iconSpacing));
+    const double effSideSlack = core::maxSideSlack(m_config.curve, std::max(1.0, effMax), effRadius);
     const double restingLength = (n > 0)
-        ? (static_cast<double>(n) * m_config.baseIconSize
+        ? (static_cast<double>(n) * effBase
            + static_cast<double>(n - 1) * m_config.iconSpacing)
         : 0.0;
     const double primary = restingLength
-        + 2.0 * (m_config.pillPaddingPrimary + m_config.sideSlack());
+        + 2.0 * (m_config.pillPaddingPrimary + effSideSlack);
     const double cross = static_cast<double>(m_config.recommendedPanelThickness());
 
     if (m_config.axis.isHorizontal()) {

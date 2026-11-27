@@ -1,0 +1,61 @@
+# Maintainer: Kogical <https://github.com/kogical/fluctus-plasma>
+pkgname=fluctus-plasma-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="macOS-style animated task manager dock for KDE Plasma 6.8+"
+arch=('x86_64' 'aarch64')
+url="https://github.com/kogical/fluctus-plasma"
+license=('MIT')
+depends=(
+    'qt6-base'
+    'qt6-declarative'
+    'kcoreaddons'
+    'ki18n'
+    'kwindowsystem'
+    'kglobalaccel'
+    'kservice'
+    'kio'
+    'libplasma'
+    'plasma-workspace'
+)
+optdepends=(
+    'plasma-pa: clickable audio mute indicator badges on dock icons'
+    'kpipewire: live window thumbnail previews in hover tooltips'
+)
+makedepends=(
+    'git'
+    'cmake'
+    'ninja'
+    'extra-cmake-modules'
+)
+provides=('fluctus-plasma')
+conflicts=('fluctus-plasma')
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/fluctus-plasma"
+    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+    cd "$srcdir/fluctus-plasma"
+    cmake -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+        -DFLUCTUS_REQUIRE_ECM=ON \
+        -DFLUCTUS_BUILD_TESTS=ON
+    cmake --build build --parallel "$(nproc)"
+}
+
+check() {
+    cd "$srcdir/fluctus-plasma"
+    ctest --test-dir build --output-on-failure
+}
+
+package() {
+    cd "$srcdir/fluctus-plasma"
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
