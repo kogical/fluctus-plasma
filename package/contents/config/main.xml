@@ -6,15 +6,12 @@
     <kcfgfile name=""/>
 
     <group name="General">
-        <!-- Sizing & Panel Fit -->
-        <entry name="autoScaleToPanel" type="Bool">
-            <default>true</default>
+        <!-- Sizing & Panel Fit (proportional to Plasma panel thickness) -->
+        <entry name="panelIconRatio" type="Double">
+            <default>0.65</default>
         </entry>
-        <entry name="baseIconSize" type="Int">
-            <default>48</default>
-        </entry>
-        <entry name="iconSpacing" type="Int">
-            <default>6</default>
+        <entry name="iconSpacingRatio" type="Double">
+            <default>0.15</default>
         </entry>
         <entry name="edgePadding" type="Int">
             <default>6</default>
@@ -73,8 +70,8 @@
         </entry>
 
         <!-- Physics & Animation -->
-        <entry name="maxScale" type="Double">
-            <default>1.6</default>
+        <entry name="maxZoomPanelRatio" type="Double">
+            <default>1.0</default>
         </entry>
         <entry name="influenceRadiusIcons" type="Double">
             <default>2.5</default>
@@ -101,6 +98,9 @@
         </entry>
         <entry name="indicateAudioStreams" type="Bool">
             <default>true</default>
+        </entry>
+        <entry name="showShortcutBadgesOnMeta" type="Bool">
+            <default>false</default>
         </entry>
         <entry name="dragOffToUnpin" type="Bool">
             <default>true</default>

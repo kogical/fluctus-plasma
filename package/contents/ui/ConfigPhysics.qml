@@ -8,24 +8,18 @@ KCM.SimpleKCM {
     id: physicsPage
 
     property alias cfg_magnificationEnabled: magCheck.checked
-    property alias cfg_maxScale: maxScaleSlider.value
+    property alias cfg_maxZoomPanelRatio: maxZoomSlider.value
     property alias cfg_influenceRadiusIcons: radiusSlider.value
     property alias cfg_magnificationCurve: curveCombo.currentIndex
     property alias cfg_bounceEnabled: bounceCheck.checked
     property alias cfg_bounceRatio: bounceRatioSlider.value
 
-    // Read-only context from current configuration for the headroom note
-    property int cfg_baseIconSize
-    property int cfg_edgePadding
-    property int cfg_topMargin
-    property bool cfg_autoScaleToPanel
+    // Read-only context from current configuration
+    property double cfg_panelIconRatio
 
-    readonly property int computedRecommendedThickness: {
-        const s0 = Math.max(16, cfg_baseIconSize || 48);
-        const m = magCheck.checked ? maxScaleSlider.value : 1.0;
-        const br = bounceCheck.checked ? bounceRatioSlider.value : 0.0;
-        const pad = (cfg_edgePadding || 6) + (cfg_topMargin || 6);
-        return Math.ceil(pad + Math.ceil(s0 * m) + Math.ceil(br * s0 * m));
+    readonly property real effectiveZoomMultiplier: {
+        const base = Math.max(0.25, cfg_panelIconRatio || 0.65);
+        return Math.max(1.0, maxZoomSlider.value / base);
     }
 
     Kirigami.FormLayout {
@@ -41,21 +35,21 @@ KCM.SimpleKCM {
         }
 
         RowLayout {
-            Kirigami.FormData.label: i18n("Maximum zoom:")
+            Kirigami.FormData.label: i18n("Maximum zoom size:")
             Layout.fillWidth: true
             enabled: magCheck.checked
 
             QQC2.Slider {
-                id: maxScaleSlider
+                id: maxZoomSlider
                 Layout.fillWidth: true
-                from: 1.0
-                to: 2.5
+                from: 0.30
+                to: 1.0
                 stepSize: 0.05
             }
             QQC2.Label {
-                Layout.minimumWidth: 46
+                Layout.minimumWidth: 88
                 horizontalAlignment: Text.AlignRight
-                text: maxScaleSlider.value.toFixed(2) + "×"
+                text: Math.round(maxZoomSlider.value * 100) + "% (" + physicsPage.effectiveZoomMultiplier.toFixed(2) + "×)"
             }
         }
 
@@ -124,9 +118,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             visible: true
             type: Kirigami.MessageType.Information
-            text: physicsPage.cfg_autoScaleToPanel
-                ? i18n("Panel auto-scaling is active: zoom and bounce automatically adapt to your Plasma panel thickness without clipping.")
-                : i18n("With fixed icon sizing, a panel thickness of at least %1 px is recommended for full zoom and bounce headroom on Wayland.", physicsPage.computedRecommendedThickness)
+            text: i18n("Maximum zoom size is a target percentage of available panel thickness. Both hover zoom and bounce automatically adapt to your KDE Plasma panel without clipping.")
         }
     }
 }

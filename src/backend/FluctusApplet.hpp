@@ -6,6 +6,10 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <memory>
+
+class KModifierKeyInfo;
+
 namespace fluctus::backend {
 
 /// Compiled Plasma::Applet entry point for Fluctus Plasma.
@@ -15,6 +19,7 @@ class FluctusApplet final : public Plasma::Applet {
     Q_OBJECT
 
     Q_PROPERTY(QRect screenGeometry READ screenGeometry WRITE setScreenGeometry NOTIFY screenGeometryChanged)
+    Q_PROPERTY(bool metaKeyPressed READ metaKeyPressed NOTIFY metaKeyPressedChanged)
 
 public:
     FluctusApplet(QObject *parent, const KPluginMetaData &data, const QVariantList &args);
@@ -22,6 +27,7 @@ public:
 
     [[nodiscard]] QRect screenGeometry() const noexcept { return m_screenGeometry; }
     void setScreenGeometry(const QRect &geometry);
+    [[nodiscard]] bool metaKeyPressed() const noexcept { return m_metaKeyPressed; }
 
     Q_INVOKABLE void setNeedsAttention(bool needsAttention);
     Q_INVOKABLE int recommendedPanelThickness(
@@ -38,11 +44,14 @@ public:
 
 Q_SIGNALS:
     void screenGeometryChanged();
+    void metaKeyPressedChanged();
     void activateTaskRequested(int index);
     void smartLauncherUpdated(const QString &normalizedAppId);
 
 private:
     QRect m_screenGeometry;
+    std::unique_ptr<KModifierKeyInfo> m_modifierKeyInfo;
+    bool m_metaKeyPressed{false};
 };
 
 } // namespace fluctus::backend

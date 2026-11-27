@@ -31,6 +31,9 @@ struct DockConfig {
     bool magnificationEnabled{true};
     bool editModeFrozen{false};
     bool autoScaleToPanel{false};
+    double panelIconRatio{0.65};
+    double maxZoomPanelRatio{1.0};
+    double iconSpacingRatio{0.15};
     bool clampToContainer{true};
     AxisGeometry axis{};
 
@@ -108,10 +111,23 @@ public:
     /// Returns the assigned stable slot ID.
     std::uint64_t insertSlot(std::size_t activeIndex, bool animate = true);
     void removeSlot(std::size_t activeIndex, bool animate = true);
-    void moveSlot(std::size_t fromActiveIndex, std::size_t toActiveIndex);
+    bool removeSlotById(std::uint64_t slotId, bool animate = true);
+    bool reviveSlotById(std::uint64_t slotId, bool snapWeight = false);
+    void moveSlot(
+        std::size_t fromActiveIndex,
+        std::size_t toActiveIndex,
+        double containerWidth = 0.0,
+        double containerHeight = 0.0
+    );
+    void reorderActiveSlots(
+        const std::vector<std::uint64_t> &orderedActiveIds,
+        double containerWidth = 0.0,
+        double containerHeight = 0.0
+    );
     void clearSlots();
 
     void setSlotBouncing(std::size_t activeIndex, bool bouncing);
+    void setSlotBouncingById(std::uint64_t slotId, bool bouncing);
 
     [[nodiscard]] std::size_t activeSlotCount() const noexcept;
     [[nodiscard]] std::size_t totalSlotCount() const noexcept { return m_slots.size(); }
@@ -126,6 +142,15 @@ public:
         Vec2 containerPoint,
         double containerWidth,
         double containerHeight
+    ) const noexcept;
+
+    /// Compute the drag-reorder target slot index with boundary hysteresis so dragging
+    /// across slot boundaries never oscillates back and forth.
+    [[nodiscard]] std::size_t restingDragTargetIndex(
+        Vec2 containerPoint,
+        double containerWidth,
+        double containerHeight,
+        int currentIndex
     ) const noexcept;
 
     /// Compute a thin indicator rect at the resting insertion boundary `insertionIndex`
@@ -152,6 +177,7 @@ public:
     /// Effective icon base size and delegate logical size for a given container size
     /// (accounts for autoScaleToPanel and panel cross/primary clamping).
     [[nodiscard]] double effectiveBaseIconSize(double containerWidth, double containerHeight) const noexcept;
+    [[nodiscard]] double effectiveIconSpacing(double containerWidth, double containerHeight) const noexcept;
     [[nodiscard]] double effectiveMaxScaleForContainer(double containerWidth, double containerHeight) const noexcept;
     [[nodiscard]] double effectiveDelegateLogicalSize(double containerWidth, double containerHeight) const noexcept;
 

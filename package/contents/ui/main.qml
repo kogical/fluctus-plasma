@@ -34,16 +34,9 @@ PlasmoidItem {
     readonly property bool isLiquidGlass: isCustomGlassPill && blurStyle === 1
     readonly property bool isPlasmaThemePill: backgroundMode === 2
 
-    property bool showIndexBadges: false
     property int smartLauncherRevision: 0
     property int activeDropIndex: -1
     property int externalHoverIndex: -1
-
-    Timer {
-        id: badgeTimer
-        interval: 1500
-        onTriggered: root.showIndexBadges = false
-    }
 
     // Hover-to-raise window / open group when dragging external files over a dock icon
     Timer {
@@ -86,6 +79,7 @@ PlasmoidItem {
         sortMode: TaskManager.TasksModel.SortManual
         groupMode: TaskManager.TasksModel.GroupApplications
         taskReorderingEnabled: true
+        launchInPlace: true
         separateLaunchers: Plasmoid.configuration.separateLaunchers
         filterByScreen: Plasmoid.configuration.showOnlyCurrentScreen
         filterByVirtualDesktop: Plasmoid.configuration.showOnlyCurrentDesktop
@@ -117,10 +111,24 @@ PlasmoidItem {
         if (index < 0 || index >= tasksModel.count) {
             return;
         }
-        root.showIndexBadges = true;
-        badgeTimer.restart();
 
         const modelIndex = tasksModel.makeModelIndex(index);
+        const isGroupParent = Boolean(tasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsGroupParent));
+        const childCount = Number(tasksModel.data(modelIndex, TaskManager.AbstractTasksModel.ChildCount) || 0);
+        if (isGroupParent && childCount > 1) {
+            let activeChild = -1;
+            for (let c = 0; c < childCount; ++c) {
+                const childIdx = tasksModel.makeModelIndex(index, c);
+                if (tasksModel.data(childIdx, TaskManager.AbstractTasksModel.IsActive)) {
+                    activeChild = c;
+                    break;
+                }
+            }
+            const nextChild = (activeChild >= 0) ? ((activeChild + 1) % childCount) : 0;
+            tasksModel.requestActivate(tasksModel.makeModelIndex(index, nextChild));
+            return;
+        }
+
         const isActive = tasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsActive);
         if (isActive && Plasmoid.configuration.minimizeActiveTaskOnClick) {
             tasksModel.requestToggleMinimized(modelIndex);
@@ -240,11 +248,11 @@ PlasmoidItem {
             model: tasksModel
             edge: root.dockEdge
             reversePrimary: LayoutMirroring.enabled !== Plasmoid.configuration.reverseMode
-            autoScaleToPanel: Plasmoid.configuration.autoScaleToPanel
+            autoScaleToPanel: true
+            panelIconRatio: Plasmoid.configuration.panelIconRatio
+            maxZoomPanelRatio: Plasmoid.configuration.maxZoomPanelRatio
+            iconSpacingRatio: Plasmoid.configuration.iconSpacingRatio
             clampToContainer: true
-            baseIconSize: Plasmoid.configuration.baseIconSize
-            iconSpacing: Plasmoid.configuration.iconSpacing
-            maxScale: Plasmoid.configuration.maxScale
             influenceRadiusIcons: Plasmoid.configuration.influenceRadiusIcons
             magnificationCurve: Plasmoid.configuration.magnificationCurve
             magnificationEnabled: Plasmoid.configuration.magnificationEnabled
@@ -275,9 +283,9 @@ PlasmoidItem {
                 contextMenuRef: contextMenu
                 groupDialogRef: groupDialog
                 audioTrackerRef: audioTrackerLoader.item
-                showIndexBadge: root.showIndexBadges
+                showIndexBadge: Plasmoid.metaKeyPressed && Plasmoid.configuration.showShortcutBadgesOnMeta
                 minimizeActiveOnClick: Plasmoid.configuration.minimizeActiveTaskOnClick
-                enableMipmap: Plasmoid.configuration.maxScale > 1.8
+                enableMipmap: (Plasmoid.configuration.maxZoomPanelRatio / Math.max(0.25, Plasmoid.configuration.panelIconRatio)) > 1.8
                 showReflection: Plasmoid.configuration.showReflection
                 showTooltips: Plasmoid.configuration.showTooltips
                 showWindowPreviews: Plasmoid.configuration.showWindowPreviews

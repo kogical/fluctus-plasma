@@ -25,13 +25,17 @@ DockLayoutItem::DockLayoutItem(QQuickItem *parent)
     setClip(false);
     m_engine.setConfig(m_config);
 
+    m_reconcileTimer.setSingleShot(true);
+    m_reconcileTimer.setInterval(0);
+    connect(&m_reconcileTimer, &QTimer::timeout, this, &DockLayoutItem::reconcileModel);
+
     m_driver->setTickCallback([this](double dtSeconds) {
         const bool active = m_engine.step(dtSeconds, width(), height());
         const core::DockFrame frame = m_engine.computeFrame(width(), height());
         applyCurrentFrame(frame);
 
         // Clean up delegates whose ghost slots have finished animating out.
-        std::erase_if(m_delegates, [&frame](const ManagedDelegate &entry) {
+        const std::size_t prunedGhosts = std::erase_if(m_delegates, [&frame](const ManagedDelegate &entry) {
             if (!entry.ghost) {
                 return false;
             }
@@ -50,6 +54,10 @@ DockLayoutItem::DockLayoutItem(QQuickItem *parent)
             return false;
         });
 
+        if (prunedGhosts > 0) {
+            updateStructuralImplicitSize();
+        }
+
         const bool settled = m_engine.isSettled();
         if (settled) {
             publishDelegateGeometries();
@@ -59,6 +67,7 @@ DockLayoutItem::DockLayoutItem(QQuickItem *parent)
 }
 
 DockLayoutItem::~DockLayoutItem() {
+    m_reconcileTimer.stop();
     m_driver->stopImmediately();
     clearAllDelegates();
 }
@@ -79,6 +88,7 @@ void DockLayoutItem::setModel(QAbstractItemModel *model) {
         connect(m_model, &QAbstractItemModel::rowsInserted, this, &DockLayoutItem::onRowsInserted);
         connect(m_model, &QAbstractItemModel::rowsRemoved, this, &DockLayoutItem::onRowsRemoved);
         connect(m_model, &QAbstractItemModel::rowsMoved, this, &DockLayoutItem::onRowsMoved);
+        connect(m_model, &QAbstractItemModel::layoutChanged, this, &DockLayoutItem::onLayoutChanged);
         connect(m_model, &QAbstractItemModel::dataChanged, this, &DockLayoutItem::onDataChanged);
     }
 
@@ -215,6 +225,9 @@ void DockLayoutItem::setMagnificationEnabled(bool enabled) {
     }
     m_config.magnificationEnabled = enabled;
     m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
     m_driver->ensureRunning();
     Q_EMIT configChanged();
 }
@@ -225,6 +238,9 @@ void DockLayoutItem::setEditModeFrozen(bool frozen) {
     }
     m_config.editModeFrozen = frozen;
     m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
     m_driver->ensureRunning();
     Q_EMIT configChanged();
 }
@@ -234,6 +250,45 @@ void DockLayoutItem::setAutoScaleToPanel(bool enabled) {
         return;
     }
     m_config.autoScaleToPanel = enabled;
+    m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
+    Q_EMIT configChanged();
+}
+
+void DockLayoutItem::setPanelIconRatio(qreal ratio) {
+    const double clamped = std::clamp<double>(ratio, 0.25, 1.0);
+    if (qFuzzyCompare(m_config.panelIconRatio, clamped)) {
+        return;
+    }
+    m_config.panelIconRatio = clamped;
+    m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
+    Q_EMIT configChanged();
+}
+
+void DockLayoutItem::setMaxZoomPanelRatio(qreal ratio) {
+    const double clamped = std::clamp<double>(ratio, 0.25, 1.0);
+    if (qFuzzyCompare(m_config.maxZoomPanelRatio, clamped)) {
+        return;
+    }
+    m_config.maxZoomPanelRatio = clamped;
+    m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
+    updateStructuralImplicitSize();
+    polish();
+    Q_EMIT configChanged();
+}
+
+void DockLayoutItem::setIconSpacingRatio(qreal ratio) {
+    const double clamped = std::clamp<double>(ratio, 0.0, 0.75);
+    if (qFuzzyCompare(m_config.iconSpacingRatio, clamped)) {
+        return;
+    }
+    m_config.iconSpacingRatio = clamped;
     m_engine.setConfig(m_config);
     syncAllDelegateSizesAndOrigins();
     updateStructuralImplicitSize();
@@ -289,6 +344,7 @@ void DockLayoutItem::setEdgePadding(qreal padding) {
     }
     m_config.edgePadding = clamped;
     m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
     updateStructuralImplicitSize();
     polish();
     Q_EMIT configChanged();
@@ -301,6 +357,7 @@ void DockLayoutItem::setPillPaddingPrimary(qreal padding) {
     }
     m_config.pillPaddingPrimary = clamped;
     m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
     updateStructuralImplicitSize();
     polish();
     Q_EMIT configChanged();
@@ -324,6 +381,7 @@ void DockLayoutItem::setTopMargin(qreal margin) {
     }
     m_config.topMargin = clamped;
     m_engine.setConfig(m_config);
+    syncAllDelegateSizesAndOrigins();
     updateStructuralImplicitSize();
     polish();
     Q_EMIT configChanged();
@@ -341,6 +399,12 @@ void DockLayoutItem::clearPointer() {
 
 int DockLayoutItem::restingInsertionIndex(qreal x, qreal y) const {
     return static_cast<int>(m_engine.restingInsertionIndex(core::Vec2{x, y}, width(), height()));
+}
+
+int DockLayoutItem::restingDragTargetIndex(qreal x, qreal y, int currentIndex) const {
+    return static_cast<int>(
+        m_engine.restingDragTargetIndex(core::Vec2{x, y}, width(), height(), currentIndex)
+    );
 }
 
 QRectF DockLayoutItem::insertionIndicatorRect(int insertionIndex) const {
@@ -401,7 +465,7 @@ void DockLayoutItem::publishDelegateGeometries() {
             Qt::DirectConnection,
             Q_ARG(QModelIndex, QModelIndex(entry.modelIndex)),
             Q_ARG(QRect, globalRect),
-            Q_ARG(QQuickItem *, entry.item.data())
+            Q_ARG(QObject *, entry.item.data())
         );
     }
 }
@@ -435,6 +499,10 @@ void DockLayoutItem::itemChange(ItemChange change, const ItemChangeData &value) 
 }
 
 void DockLayoutItem::updatePolish() {
+    const double expectedDelSize = m_engine.effectiveDelegateLogicalSize(width(), height());
+    if (std::abs(expectedDelSize - m_lastDelegateLogicalSize) > 0.25) {
+        syncAllDelegateSizesAndOrigins();
+    }
     const core::DockFrame frame = m_engine.computeFrame(width(), height());
     applyCurrentFrame(frame);
     if (m_engine.isSettled()) {
@@ -443,85 +511,301 @@ void DockLayoutItem::updatePolish() {
 }
 
 void DockLayoutItem::onModelReset() {
+    m_reconcileTimer.stop();
+    m_suppressNextLayoutReorder = false;
     rebuildAllDelegates();
 }
 
+void DockLayoutItem::scheduleReconcile() {
+    if (!m_reconcileTimer.isActive()) {
+        m_reconcileTimer.start();
+    }
+}
+
+bool DockLayoutItem::hasTaskModelRoles() const {
+    return roleIdByName(QByteArrayLiteral("IsLauncher")) >= 0
+        || roleIdByName(QByteArrayLiteral("AppId")) >= 0
+        || roleIdByName(QByteArrayLiteral("StorageId")) >= 0;
+}
+
+DockLayoutItem::TaskIdentity DockLayoutItem::readTaskIdentity(int row) const {
+    TaskIdentity id{};
+    if (!m_model || row < 0 || row >= m_model->rowCount()) {
+        return id;
+    }
+    id.hasTaskRoles = hasTaskModelRoles();
+    if (!id.hasTaskRoles) {
+        return id;
+    }
+
+    const QModelIndex idx = m_model->index(row, 0);
+    auto normalizeAppKey = [](QString s) -> QString {
+        s = s.trimmed().toLower();
+        if (s.endsWith(QStringLiteral(".desktop"))) {
+            s.chop(8);
+        }
+        return s;
+    };
+
+    if (const int storageRole = roleIdByName(QByteArrayLiteral("StorageId")); storageRole >= 0) {
+        id.storageOrAppId = normalizeAppKey(m_model->data(idx, storageRole).toString());
+    }
+    if (id.storageOrAppId.isEmpty()) {
+        if (const int appIdRole = roleIdByName(QByteArrayLiteral("AppId")); appIdRole >= 0) {
+            id.storageOrAppId = normalizeAppKey(m_model->data(idx, appIdRole).toString());
+        }
+    }
+    if (const int urlRole = roleIdByName(QByteArrayLiteral("LauncherUrlWithoutIcon")); urlRole >= 0) {
+        id.launcherUrl = m_model->data(idx, urlRole).toUrl().toString().trimmed().toLower();
+    }
+    if (const int appNameRole = roleIdByName(QByteArrayLiteral("AppName")); appNameRole >= 0) {
+        id.appName = m_model->data(idx, appNameRole).toString().trimmed().toLower();
+    }
+    if (id.appName.isEmpty()) {
+        id.appName = m_model->data(idx, Qt::DisplayRole).toString().trimmed().toLower();
+    }
+    return id;
+}
+
+bool DockLayoutItem::matchesTaskIdentity(const TaskIdentity &a, const TaskIdentity &b) noexcept {
+    if (!a.hasTaskRoles || !b.hasTaskRoles) {
+        return false;
+    }
+    if (!a.storageOrAppId.isEmpty() && !b.storageOrAppId.isEmpty()) {
+        return a.storageOrAppId == b.storageOrAppId;
+    }
+    if (!a.launcherUrl.isEmpty() && !b.launcherUrl.isEmpty() && a.launcherUrl == b.launcherUrl) {
+        return true;
+    }
+    if (!a.appName.isEmpty() && !b.appName.isEmpty() && a.appName == b.appName) {
+        return true;
+    }
+    return false;
+}
+
+void DockLayoutItem::reconcileModel() {
+    m_reconcileTimer.stop();
+    if (!m_model || !m_delegate) {
+        return;
+    }
+
+    struct DesiredRow {
+        int modelRow{0};
+        QPersistentModelIndex persistentIndex;
+        TaskIdentity identity{};
+        bool isStartup{false};
+        bool isLauncher{false};
+        bool forceBounce{false};
+    };
+
+    const int rowCount = m_model->rowCount();
+    const int startupRole = roleIdByName(QByteArrayLiteral("IsStartup"));
+    const int launcherRole = roleIdByName(QByteArrayLiteral("IsLauncher"));
+
+    std::vector<DesiredRow> rawRows;
+    rawRows.reserve(static_cast<std::size_t>(std::max(0, rowCount)));
+    for (int row = 0; row < rowCount; ++row) {
+        const QModelIndex idx = m_model->index(row, 0);
+        DesiredRow desired{};
+        desired.modelRow = row;
+        desired.persistentIndex = QPersistentModelIndex(idx);
+        desired.identity = readTaskIdentity(row);
+        desired.isStartup = (startupRole >= 0) && m_model->data(idx, startupRole).toBool();
+        desired.isLauncher = (launcherRole >= 0) && m_model->data(idx, launcherRole).toBool();
+        rawRows.push_back(std::move(desired));
+    }
+
+    // Suppress duplicate IsStartup rows that mirror an already-present Launcher/Window row
+    // (e.g., preferred://filemanager alongside a Dolphin startup notification) and route
+    // the bounce directly onto the existing pinned/running icon instead.
+    std::vector<DesiredRow> desiredRows;
+    desiredRows.reserve(rawRows.size());
+    for (const auto &r : rawRows) {
+        if (!r.isStartup) {
+            desiredRows.push_back(r);
+        }
+    }
+    for (const auto &r : rawRows) {
+        if (!r.isStartup) {
+            continue;
+        }
+        bool mergedIntoExisting = false;
+        for (auto &existing : desiredRows) {
+            if (matchesTaskIdentity(r.identity, existing.identity)) {
+                existing.forceBounce = true;
+                mergedIntoExisting = true;
+                break;
+            }
+        }
+        if (!mergedIntoExisting) {
+            desiredRows.push_back(r);
+        }
+    }
+    std::sort(
+        desiredRows.begin(),
+        desiredRows.end(),
+        [](const DesiredRow &a, const DesiredRow &b) { return a.modelRow < b.modelRow; }
+    );
+
+    // Three-pass identity matching against existing delegates:
+    //   1. Exact QPersistentModelIndex match (active delegates)
+    //   2. TaskIdentity match against remaining active delegates (same-tick Launcher<->Startup<->Window swap)
+    //   3. TaskIdentity match against animating ghost delegates (cross-tick revival without duplication)
+    std::vector<bool> oldUsed(m_delegates.size(), false);
+    std::vector<int> matchedOldIndex(desiredRows.size(), -1);
+
+    // Pass 1: exact persistent model index match among active delegates.
+    for (std::size_t i = 0; i < desiredRows.size(); ++i) {
+        for (std::size_t j = 0; j < m_delegates.size(); ++j) {
+            if (oldUsed[j] || m_delegates[j].ghost) {
+                continue;
+            }
+            if (m_delegates[j].modelIndex.isValid()
+                && m_delegates[j].modelIndex.model() == m_model
+                && m_delegates[j].modelIndex.row() == desiredRows[i].modelRow) {
+                oldUsed[j] = true;
+                matchedOldIndex[i] = static_cast<int>(j);
+                break;
+            }
+        }
+    }
+
+    // Pass 2: TaskIdentity match among remaining active delegates.
+    for (std::size_t i = 0; i < desiredRows.size(); ++i) {
+        if (matchedOldIndex[i] >= 0 || !desiredRows[i].identity.hasTaskRoles) {
+            continue;
+        }
+        for (std::size_t j = 0; j < m_delegates.size(); ++j) {
+            if (oldUsed[j] || m_delegates[j].ghost) {
+                continue;
+            }
+            if (matchesTaskIdentity(m_delegates[j].identity, desiredRows[i].identity)) {
+                oldUsed[j] = true;
+                matchedOldIndex[i] = static_cast<int>(j);
+                break;
+            }
+        }
+    }
+
+    // Pass 3: TaskIdentity match among animating ghost delegates (revive in-place!).
+    for (std::size_t i = 0; i < desiredRows.size(); ++i) {
+        if (matchedOldIndex[i] >= 0 || !desiredRows[i].identity.hasTaskRoles) {
+            continue;
+        }
+        for (std::size_t j = 0; j < m_delegates.size(); ++j) {
+            if (oldUsed[j] || !m_delegates[j].ghost) {
+                continue;
+            }
+            if (matchesTaskIdentity(m_delegates[j].identity, desiredRows[i].identity)) {
+                oldUsed[j] = true;
+                matchedOldIndex[i] = static_cast<int>(j);
+                break;
+            }
+        }
+    }
+
+    // Any unused old active delegates are genuinely closed/unpinned -> animate out as ghosts.
+    std::vector<ManagedDelegate> survivingGhosts;
+    for (std::size_t j = 0; j < m_delegates.size(); ++j) {
+        if (oldUsed[j]) {
+            continue;
+        }
+        ManagedDelegate entry = m_delegates[j];
+        if (!entry.ghost) {
+            entry.ghost = true;
+            m_engine.removeSlotById(entry.slotId, true);
+        }
+        survivingGhosts.push_back(std::move(entry));
+    }
+
+    // Build updated active delegates (reusing matched ones, reviving ghosts, creating new ones).
+    std::vector<ManagedDelegate> nextActive;
+    nextActive.reserve(desiredRows.size());
+    std::vector<std::uint64_t> orderedActiveIds;
+    orderedActiveIds.reserve(desiredRows.size());
+
+    for (std::size_t i = 0; i < desiredRows.size(); ++i) {
+        const auto &desired = desiredRows[i];
+        if (matchedOldIndex[i] >= 0) {
+            ManagedDelegate entry = m_delegates[static_cast<std::size_t>(matchedOldIndex[i])];
+            if (entry.ghost) {
+                entry.ghost = false;
+                m_engine.reviveSlotById(entry.slotId, false);
+            }
+            entry.modelIndex = desired.persistentIndex;
+            entry.isStartup = desired.isStartup;
+            entry.isLauncher = desired.isLauncher;
+            entry.identity = desired.identity;
+            orderedActiveIds.push_back(entry.slotId);
+            nextActive.push_back(std::move(entry));
+        } else {
+            const std::uint64_t slotId = m_engine.insertSlot(i, true);
+            QQuickItem *item = createDelegateForRow(desired.modelRow, slotId, true);
+            ManagedDelegate entry{};
+            entry.slotId = slotId;
+            entry.modelIndex = desired.persistentIndex;
+            entry.item = item;
+            entry.ghost = false;
+            entry.isStartup = desired.isStartup;
+            entry.isLauncher = desired.isLauncher;
+            entry.identity = desired.identity;
+            orderedActiveIds.push_back(slotId);
+            nextActive.push_back(std::move(entry));
+        }
+    }
+
+    m_engine.reorderActiveSlots(orderedActiveIds, width(), height());
+
+    for (std::size_t i = 0; i < nextActive.size(); ++i) {
+        syncDelegateProperties(nextActive[i], desiredRows[i].modelRow);
+        const bool bounce = desiredRows[i].forceBounce || isRowBouncing(desiredRows[i].modelRow);
+        m_engine.setSlotBouncingById(nextActive[i].slotId, bounce);
+    }
+
+    m_delegates.clear();
+    m_delegates.reserve(nextActive.size() + survivingGhosts.size());
+    for (auto &entry : nextActive) {
+        m_delegates.push_back(std::move(entry));
+    }
+    for (auto &ghost : survivingGhosts) {
+        m_delegates.push_back(std::move(ghost));
+    }
+
+    updateStructuralImplicitSize();
+    updateAttentionState();
+    applyCurrentFrame(m_engine.computeFrame(width(), height()));
+    Q_EMIT countChanged();
+    if (!m_engine.isSettled()) {
+        m_driver->ensureRunning();
+    }
+}
+
 void DockLayoutItem::onRowsInserted(const QModelIndex &parent, int first, int last) {
+    Q_UNUSED(first);
+    Q_UNUSED(last);
     if (parent.isValid() || !m_model || !m_delegate) {
         return;
     }
-
-    for (int row = first; row <= last; ++row) {
-        const std::uint64_t slotId = m_engine.insertSlot(static_cast<std::size_t>(row), true);
-        QQuickItem *item = createDelegateForRow(row, slotId);
-
-        ManagedDelegate entry{};
-        entry.slotId = slotId;
-        entry.modelIndex = QPersistentModelIndex(m_model->index(row, 0));
-        entry.item = item;
-        entry.ghost = false;
-
-        // Insert into m_delegates at position matching active index `row`.
-        int activeSeen = 0;
-        std::size_t insertPos = m_delegates.size();
-        for (std::size_t i = 0; i < m_delegates.size(); ++i) {
-            if (!m_delegates[i].ghost) {
-                if (activeSeen == row) {
-                    insertPos = i;
-                    break;
-                }
-                ++activeSeen;
-            }
-        }
-        m_delegates.insert(m_delegates.begin() + static_cast<std::ptrdiff_t>(insertPos), entry);
-        m_engine.setSlotBouncing(static_cast<std::size_t>(row), isRowBouncing(row));
+    m_suppressNextLayoutReorder = false;
+    if (hasTaskModelRoles()) {
+        scheduleReconcile();
+    } else {
+        reconcileModel();
     }
-
-    // Re-sync taskIndex for all active delegates.
-    int activeIdx = 0;
-    for (auto &entry : m_delegates) {
-        if (!entry.ghost) {
-            syncDelegateProperties(entry, activeIdx++);
-        }
-    }
-
-    updateStructuralImplicitSize();
-    updateAttentionState();
-    Q_EMIT countChanged();
-    m_driver->ensureRunning();
 }
 
 void DockLayoutItem::onRowsRemoved(const QModelIndex &parent, int first, int last) {
-    if (parent.isValid()) {
+    Q_UNUSED(first);
+    Q_UNUSED(last);
+    if (parent.isValid() || !m_model || !m_delegate) {
         return;
     }
-
-    for (int row = last; row >= first; --row) {
-        m_engine.removeSlot(static_cast<std::size_t>(row), true);
-
-        int activeSeen = 0;
-        for (auto &entry : m_delegates) {
-            if (!entry.ghost) {
-                if (activeSeen == row) {
-                    entry.ghost = true;
-                    break;
-                }
-                ++activeSeen;
-            }
-        }
+    m_suppressNextLayoutReorder = false;
+    if (hasTaskModelRoles()) {
+        scheduleReconcile();
+    } else {
+        reconcileModel();
     }
-
-    int activeIdx = 0;
-    for (auto &entry : m_delegates) {
-        if (!entry.ghost) {
-            syncDelegateProperties(entry, activeIdx++);
-        }
-    }
-
-    updateStructuralImplicitSize();
-    updateAttentionState();
-    Q_EMIT countChanged();
-    m_driver->ensureRunning();
 }
 
 void DockLayoutItem::onRowsMoved(
@@ -535,11 +819,22 @@ void DockLayoutItem::onRowsMoved(
         return;
     }
 
+    if (m_reconcileTimer.isActive()
+        || !m_model
+        || static_cast<int>(m_engine.activeSlotCount()) != m_model->rowCount()) {
+        if (hasTaskModelRoles()) {
+            scheduleReconcile();
+        } else {
+            reconcileModel();
+        }
+        return;
+    }
+
     const int moveCount = end - start + 1;
     for (int i = 0; i < moveCount; ++i) {
         const int fromIdx = (row > start) ? start : (start + i);
         const int toIdx = (row > start) ? (row - 1) : (row + i);
-        m_engine.moveSlot(static_cast<std::size_t>(fromIdx), static_cast<std::size_t>(toIdx));
+        m_engine.moveSlot(static_cast<std::size_t>(fromIdx), static_cast<std::size_t>(toIdx), width(), height());
 
         // Mirror move in m_delegates among active entries.
         int activeSeen = 0;
@@ -571,13 +866,159 @@ void DockLayoutItem::onRowsMoved(
         }
     }
 
+    // TaskManager::TasksModel::move() calls beginMoveRows/endMoveRows and immediately
+    // follows with forceResort() (QSortFilterProxyModel::invalidate -> layoutChanged).
+    // That synchronous invalidate() remaps QPersistentModelIndex through stale proxy maps,
+    // which would otherwise swap the moved delegates back. Suppress the reorder pass on that
+    // immediate follow-up layoutChanged and re-anchor persistent indexes cleanly instead.
+    m_suppressNextLayoutReorder = true;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() { m_suppressNextLayoutReorder = false; },
+        Qt::QueuedConnection
+    );
+
     int activeIdx = 0;
     for (auto &entry : m_delegates) {
         if (!entry.ghost) {
+            if (m_model) {
+                entry.modelIndex = QPersistentModelIndex(m_model->index(activeIdx, 0));
+            }
             syncDelegateProperties(entry, activeIdx++);
         }
     }
 
+    polish();
+    if (!m_engine.isSettled()) {
+        m_driver->ensureRunning();
+    }
+}
+
+void DockLayoutItem::onLayoutChanged(
+    const QList<QPersistentModelIndex> &parents,
+    QAbstractItemModel::LayoutChangeHint hint
+) {
+    Q_UNUSED(hint);
+    if (!m_model || !m_delegate) {
+        return;
+    }
+
+    // If specific parents were provided and none is the root index, only a child subtree changed.
+    if (!parents.isEmpty()) {
+        bool affectsRoot = false;
+        for (const QPersistentModelIndex &p : parents) {
+            if (!p.isValid()) {
+                affectsRoot = true;
+                break;
+            }
+        }
+        if (!affectsRoot) {
+            return;
+        }
+    }
+
+    if (m_reconcileTimer.isActive()) {
+        return;
+    }
+
+    const int rowCount = m_model->rowCount();
+    int activeCount = 0;
+    for (const auto &entry : m_delegates) {
+        if (!entry.ghost) {
+            ++activeCount;
+        }
+    }
+
+    if (activeCount != rowCount) {
+        m_suppressNextLayoutReorder = false;
+        reconcileModel();
+        return;
+    }
+
+    if (m_suppressNextLayoutReorder) {
+        m_suppressNextLayoutReorder = false;
+        int activeIdx = 0;
+        for (auto &entry : m_delegates) {
+            if (!entry.ghost) {
+                entry.modelIndex = QPersistentModelIndex(m_model->index(activeIdx, 0));
+                syncDelegateProperties(entry, activeIdx);
+                m_engine.setSlotBouncing(static_cast<std::size_t>(activeIdx), isRowBouncing(activeIdx));
+                ++activeIdx;
+            }
+        }
+        updateAttentionState();
+        polish();
+        if (!m_engine.isSettled()) {
+            m_driver->ensureRunning();
+        }
+        return;
+    }
+
+    // Verify that existing active delegates' QPersistentModelIndex rows form a valid permutation of 0..rowCount-1.
+    std::vector<ManagedDelegate> byNewRow(static_cast<std::size_t>(std::max(0, rowCount)));
+    std::vector<bool> seen(static_cast<std::size_t>(std::max(0, rowCount)), false);
+    bool validPermutation = true;
+    bool orderChanged = false;
+    int currentActiveIdx = 0;
+
+    for (const auto &entry : m_delegates) {
+        if (entry.ghost) {
+            continue;
+        }
+        if (!entry.modelIndex.isValid() || entry.modelIndex.model() != m_model) {
+            validPermutation = false;
+            break;
+        }
+        const int newRow = entry.modelIndex.row();
+        if (newRow < 0 || newRow >= rowCount) {
+            validPermutation = false;
+            break;
+        }
+        const auto uRow = static_cast<std::size_t>(newRow);
+        if (seen[uRow]) {
+            validPermutation = false;
+            break;
+        }
+        seen[uRow] = true;
+        byNewRow[uRow] = entry;
+        if (newRow != currentActiveIdx) {
+            orderChanged = true;
+        }
+        ++currentActiveIdx;
+    }
+
+    if (!validPermutation) {
+        reconcileModel();
+        return;
+    }
+
+    if (orderChanged) {
+        std::vector<std::uint64_t> orderedActiveIds;
+        orderedActiveIds.reserve(byNewRow.size());
+        for (const auto &entry : byNewRow) {
+            orderedActiveIds.push_back(entry.slotId);
+        }
+
+        std::size_t nextActive = 0;
+        for (auto &entry : m_delegates) {
+            if (!entry.ghost) {
+                entry = byNewRow[nextActive++];
+            }
+        }
+        m_engine.reorderActiveSlots(orderedActiveIds, width(), height());
+    }
+
+    // Always re-sync delegate properties (including fresh QModelIndex and taskIndex) after layoutChanged.
+    int activeIdx = 0;
+    for (auto &entry : m_delegates) {
+        if (!entry.ghost) {
+            syncDelegateProperties(entry, activeIdx);
+            m_engine.setSlotBouncing(static_cast<std::size_t>(activeIdx), isRowBouncing(activeIdx));
+            ++activeIdx;
+        }
+    }
+
+    updateAttentionState();
     polish();
     if (!m_engine.isSettled()) {
         m_driver->ensureRunning();
@@ -590,20 +1031,19 @@ void DockLayoutItem::onDataChanged(
     const QList<int> &roles
 ) {
     Q_UNUSED(roles);
-    if (!m_model || topLeft.parent().isValid()) {
+    if (!m_model || topLeft.parent().isValid() || m_reconcileTimer.isActive()) {
         return;
     }
 
     const int first = topLeft.row();
     const int last = bottomRight.row();
-    int activeIdx = 0;
     for (auto &entry : m_delegates) {
-        if (!entry.ghost) {
-            if (activeIdx >= first && activeIdx <= last) {
-                syncDelegateProperties(entry, activeIdx);
-                m_engine.setSlotBouncing(static_cast<std::size_t>(activeIdx), isRowBouncing(activeIdx));
+        if (!entry.ghost && entry.modelIndex.isValid()) {
+            const int modelRow = entry.modelIndex.row();
+            if (modelRow >= first && modelRow <= last) {
+                syncDelegateProperties(entry, modelRow);
+                m_engine.setSlotBouncingById(entry.slotId, isRowBouncing(modelRow));
             }
-            ++activeIdx;
         }
     }
 
@@ -614,6 +1054,7 @@ void DockLayoutItem::onDataChanged(
 }
 
 void DockLayoutItem::rebuildAllDelegates() {
+    m_reconcileTimer.stop();
     clearAllDelegates();
     m_engine.clearSlots();
 
@@ -636,9 +1077,10 @@ void DockLayoutItem::rebuildAllDelegates() {
         entry.modelIndex = QPersistentModelIndex(m_model->index(row, 0));
         entry.item = item;
         entry.ghost = false;
+        entry.identity = readTaskIdentity(row);
         m_delegates.push_back(entry);
 
-        m_engine.setSlotBouncing(static_cast<std::size_t>(row), isRowBouncing(row));
+        m_engine.setSlotBouncingById(slotId, isRowBouncing(row));
     }
 
     updateStructuralImplicitSize();
@@ -660,7 +1102,7 @@ void DockLayoutItem::clearAllDelegates() {
     m_delegates.clear();
 }
 
-QQuickItem *DockLayoutItem::createDelegateForRow(int row, std::uint64_t slotId) {
+QQuickItem *DockLayoutItem::createDelegateForRow(int row, std::uint64_t slotId, bool startHidden) {
     Q_UNUSED(slotId);
     if (!m_delegate || !m_model) {
         return nullptr;
@@ -688,6 +1130,10 @@ QQuickItem *DockLayoutItem::createDelegateForRow(int row, std::uint64_t slotId) 
     const double delSize = m_engine.effectiveDelegateLogicalSize(width(), height());
     item->setSize(QSizeF(delSize, delSize));
     item->setTransformOrigin(transformOriginForEdge());
+    if (startHidden) {
+        item->setScale(0.0);
+        item->setOpacity(0.0);
+    }
 
     ManagedDelegate temp{};
     temp.modelIndex = QPersistentModelIndex(m_model->index(row, 0));
@@ -718,9 +1164,13 @@ void DockLayoutItem::syncDelegateProperties(ManagedDelegate &entry, int activeIn
     entry.item->setProperty("displayTitle", m_model->data(idx, Qt::DisplayRole).toString());
     entry.item->setProperty("decorationIcon", m_model->data(idx, Qt::DecorationRole));
     entry.item->setProperty("isActive", readRole(QByteArrayLiteral("IsActive"), false).toBool());
-    entry.item->setProperty("isLauncher", readRole(QByteArrayLiteral("IsLauncher"), false).toBool());
+    const bool launcher = readRole(QByteArrayLiteral("IsLauncher"), false).toBool();
+    entry.isLauncher = launcher;
+    entry.item->setProperty("isLauncher", launcher);
     entry.item->setProperty("isWindow", readRole(QByteArrayLiteral("IsWindow"), false).toBool());
-    entry.item->setProperty("isStartup", readRole(QByteArrayLiteral("IsStartup"), false).toBool());
+    const bool startup = readRole(QByteArrayLiteral("IsStartup"), false).toBool();
+    entry.isStartup = startup;
+    entry.item->setProperty("isStartup", startup);
     entry.item->setProperty("isDemandingAttention", readRole(QByteArrayLiteral("IsDemandingAttention"), false).toBool());
     entry.item->setProperty("isMinimized", readRole(QByteArrayLiteral("IsMinimized"), false).toBool());
     entry.item->setProperty("isMaximized", readRole(QByteArrayLiteral("IsMaximized"), false).toBool());
@@ -738,17 +1188,21 @@ void DockLayoutItem::syncDelegateProperties(ManagedDelegate &entry, int activeIn
     entry.item->setProperty("winIdList", readRole(QByteArrayLiteral("WinIdList"), QVariantList()));
     entry.item->setProperty("isGroupParent", readRole(QByteArrayLiteral("IsGroupParent"), false).toBool());
     entry.item->setProperty("childCount", readRole(QByteArrayLiteral("ChildCount"), 0).toInt());
-    entry.item->setProperty("appId", readRole(QByteArrayLiteral("AppId"), QString()).toString());
+    const QString appId = readRole(QByteArrayLiteral("AppId"), QString()).toString();
+    entry.item->setProperty("appId", appId);
     entry.item->setProperty("appName", readRole(QByteArrayLiteral("AppName"), QString()).toString());
     entry.item->setProperty("appPid", readRole(QByteArrayLiteral("AppPid"), 0).toInt());
-    entry.item->setProperty("launcherUrl", readRole(QByteArrayLiteral("LauncherUrlWithoutIcon"), QUrl()));
+    const QUrl launcherUrl = readRole(QByteArrayLiteral("LauncherUrlWithoutIcon"), QUrl()).toUrl();
+    entry.item->setProperty("launcherUrl", launcherUrl);
     entry.item->setProperty("launcherUrlFull", readRole(QByteArrayLiteral("LauncherUrl"), QUrl()));
     entry.item->setProperty("dockEdge", static_cast<int>(m_config.axis.edge));
     entry.item->setProperty("delegateLogicalSize", m_engine.effectiveDelegateLogicalSize(width(), height()));
+    entry.identity = readTaskIdentity(idx.row());
 }
 
 void DockLayoutItem::syncAllDelegateSizesAndOrigins() {
     const double delSize = m_engine.effectiveDelegateLogicalSize(width(), height());
+    m_lastDelegateLogicalSize = delSize;
     const QQuickItem::TransformOrigin origin = transformOriginForEdge();
     for (auto &entry : m_delegates) {
         if (entry.item) {
@@ -761,14 +1215,22 @@ void DockLayoutItem::syncAllDelegateSizesAndOrigins() {
 }
 
 void DockLayoutItem::updateStructuralImplicitSize() {
-    const std::size_t n = m_engine.activeSlotCount();
-    const double effBase = m_engine.effectiveBaseIconSize(width(), height());
-    const double effMax = m_engine.effectiveMaxScaleForContainer(width(), height());
-    const double effRadius = std::max(1.0, m_config.influenceRadiusIcons * (effBase + m_config.iconSpacing));
+    // Include animating ghost slots so the Fit-Content panel never shrinks prematurely
+    // while a closing icon is still scaling out (shrinking happens once the ghost is pruned).
+    const std::size_t n = m_engine.totalSlotCount();
+    // Pass 0 for the primary axis so implicit primary size reflects the desired
+    // cross-proportional icon size rather than feeding back into primary clamping
+    // (which would trap Fit-Content Plasma panels at minimum width on startup).
+    const double queryW = m_config.axis.isHorizontal() ? 0.0 : width();
+    const double queryH = m_config.axis.isHorizontal() ? height() : 0.0;
+    const double effBase = m_engine.effectiveBaseIconSize(queryW, queryH);
+    const double effSpacing = m_engine.effectiveIconSpacing(queryW, queryH);
+    const double effMax = m_engine.effectiveMaxScaleForContainer(queryW, queryH);
+    const double effRadius = std::max(1.0, m_config.influenceRadiusIcons * (effBase + effSpacing));
     const double effSideSlack = core::maxSideSlack(m_config.curve, std::max(1.0, effMax), effRadius);
     const double restingLength = (n > 0)
         ? (static_cast<double>(n) * effBase
-           + static_cast<double>(n - 1) * m_config.iconSpacing)
+           + static_cast<double>(n - 1) * effSpacing)
         : 0.0;
     const double primary = restingLength
         + 2.0 * (m_config.pillPaddingPrimary + effSideSlack);
@@ -795,7 +1257,10 @@ void DockLayoutItem::applyCurrentFrame(const core::DockFrame &frame) {
         // Scale-only + position-only per frame (zero per-frame setSize!).
         item->setPosition(QPointF(slot.delegateTopLeft.x, slot.delegateTopLeft.y));
         item->setScale(slot.delegateScale);
-        item->setOpacity(slot.weight);
+        const double visualOpacity = slot.ghost
+            ? std::clamp(slot.weight * slot.weight, 0.0, 1.0)
+            : std::clamp(slot.weight * 1.35, 0.0, 1.0);
+        item->setOpacity(visualOpacity);
         item->setProperty("slotScale", slot.scale);
         item->setProperty("bounceOffset", slot.bounceOffset);
     }

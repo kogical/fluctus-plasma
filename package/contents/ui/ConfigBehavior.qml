@@ -13,6 +13,7 @@ KCM.SimpleKCM {
     property alias cfg_showTooltips: showTooltipsCheck.checked
     property alias cfg_showWindowPreviews: showPreviewsCheck.checked
     property alias cfg_indicateAudioStreams: indicateAudioCheck.checked
+    property alias cfg_showShortcutBadgesOnMeta: shortcutBadgesCheck.checked
     property alias cfg_dragOffToUnpin: dragOffUnpinCheck.checked
     property alias cfg_separateLaunchers: separateLaunchersCheck.checked
     property alias cfg_reverseMode: reverseModeCheck.checked
@@ -72,6 +73,12 @@ KCM.SimpleKCM {
             id: indicateAudioCheck
             Kirigami.FormData.label: i18n("Audio:")
             text: i18n("Show clickable mute indicator badge on apps playing audio")
+        }
+
+        QQC2.CheckBox {
+            id: shortcutBadgesCheck
+            Kirigami.FormData.label: i18n("Shortcuts:")
+            text: i18n("Show 1–9 shortcut badges while holding the Meta key")
         }
 
         Kirigami.Separator {

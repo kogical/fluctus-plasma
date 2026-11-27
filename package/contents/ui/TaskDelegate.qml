@@ -249,12 +249,13 @@ Item {
 
     // SmartLauncher unread count badge OR group count badge (top-right)
     Rectangle {
+        readonly property real badgeSize: Math.round(Math.max(14, Math.min(26, delegateRoot.delegateLogicalSize * 0.26)))
         visible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
         anchors.top: parent.top
         anchors.right: parent.right
-        width: Math.max(20, countLabel.implicitWidth + 10)
-        height: 20
-        radius: 10
+        width: Math.max(badgeSize, countLabel.implicitWidth + Math.round(badgeSize * 0.5))
+        height: badgeSize
+        radius: badgeSize * 0.5
         color: delegateRoot.smartCountVisible ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.highlightColor
 
         Text {
@@ -264,29 +265,38 @@ Item {
                 ? (delegateRoot.smartCount > 99 ? "99+" : String(delegateRoot.smartCount))
                 : String(delegateRoot.childCount)
             color: "#ffffff"
-            font.pixelSize: 12
+            font.pixelSize: Math.max(9, Math.round(parent.badgeSize * 0.6))
             font.bold: true
         }
     }
 
-    // Timed shortcut index badge (shown briefly after Meta+1..9)
+    // Shortcut index badge (shown smoothly while holding Meta when enabled in settings)
     Rectangle {
-        visible: delegateRoot.showIndexBadge && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
+        readonly property real badgeSize: Math.round(Math.max(15, Math.min(24, delegateRoot.delegateLogicalSize * 0.28)))
+        readonly property bool badgeActive: delegateRoot.showIndexBadge && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
+        visible: opacity > 0.01 && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
+        opacity: badgeActive ? 1.0 : 0.0
+        scale: badgeActive ? 1.0 : 0.82
         anchors.top: parent.top
         anchors.left: parent.left
-        width: 22
-        height: 22
-        radius: 6
-        color: Qt.rgba(0, 0, 0, 0.78)
+        anchors.topMargin: 1
+        anchors.leftMargin: 1
+        width: badgeSize
+        height: badgeSize
+        radius: Math.max(4, Math.round(badgeSize * 0.28))
+        color: Qt.rgba(0, 0, 0, 0.72)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.35)
+        border.color: Qt.rgba(1, 1, 1, 0.22)
         z: 12
+
+        Behavior on opacity { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
 
         Text {
             anchors.centerIn: parent
             text: String(delegateRoot.taskIndex + 1)
             color: "#ffffff"
-            font.pixelSize: 13
+            font.pixelSize: Math.max(9, Math.round(parent.badgeSize * 0.58))
             font.bold: true
         }
     }
@@ -322,6 +332,15 @@ Item {
             property bool isDragging: false
             property bool movedDuringDrag: false
             property bool draggedOutsideToUnpin: false
+            property bool suppressNextClick: false
+
+            function freshModelIndex() {
+                if (!delegateRoot.tasksModelRef || delegateRoot.taskIndex < 0
+                        || delegateRoot.taskIndex >= delegateRoot.tasksModelRef.count) {
+                    return null;
+                }
+                return delegateRoot.tasksModelRef.makeModelIndex(delegateRoot.taskIndex);
+            }
 
             function checkDraggedFarOutside(ptInDock) {
                 if (!delegateRoot.dragOffToUnpin || !delegateRoot.isPinned || !delegateRoot.dockLayoutRef) {
@@ -349,6 +368,7 @@ Item {
                     isDragging = false;
                     movedDuringDrag = false;
                     draggedOutsideToUnpin = false;
+                    suppressNextClick = false;
                 } else if (mouse.button === Qt.RightButton) {
                     mouse.accepted = true;
                     if (delegateRoot.contextMenuRef) {
@@ -379,11 +399,13 @@ Item {
                     }
 
                     delegateRoot.dockLayoutRef.updatePointer(pt.x, pt.y);
-                    const rawTarget = delegateRoot.dockLayoutRef.restingInsertionIndex(pt.x, pt.y);
-                    const maxIdx = Math.max(0, delegateRoot.tasksModelRef.count - 1);
-                    const targetIdx = Math.max(0, Math.min(rawTarget, maxIdx));
+                    const targetIdx = delegateRoot.dockLayoutRef.restingDragTargetIndex(
+                        pt.x,
+                        pt.y,
+                        delegateRoot.taskIndex
+                    );
                     if (delegateRoot.rootRef) {
-                        delegateRoot.rootRef.activeDropIndex = rawTarget;
+                        delegateRoot.rootRef.activeDropIndex = targetIdx;
                     }
                     if (delegateRoot.taskIndex >= 0 && targetIdx !== delegateRoot.taskIndex) {
                         delegateRoot.tasksModelRef.move(delegateRoot.taskIndex, targetIdx);
@@ -394,6 +416,7 @@ Item {
 
             onReleased: function(mouse) {
                 if (mouse.button === Qt.LeftButton && isDragging) {
+                    suppressNextClick = true;
                     if (delegateRoot.rootRef) {
                         delegateRoot.rootRef.activeDropIndex = -1;
                     }
@@ -418,20 +441,23 @@ Item {
                 isDragging = false;
                 movedDuringDrag = false;
                 draggedOutsideToUnpin = false;
+                suppressNextClick = false;
             }
 
             onClicked: function(mouse) {
-                if (isDragging || movedDuringDrag) {
+                if (suppressNextClick || isDragging || movedDuringDrag) {
+                    suppressNextClick = false;
                     return;
                 }
-                if (!delegateRoot.tasksModelRef || !delegateRoot.modelIndex) {
+                const idx = freshModelIndex();
+                if (!idx) {
                     return;
                 }
                 if (mouse.button === Qt.RightButton) {
                     return;
                 }
                 if (mouse.button === Qt.MiddleButton) {
-                    delegateRoot.tasksModelRef.requestNewInstance(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestNewInstance(idx);
                     return;
                 }
                 if (delegateRoot.isGroupParent && delegateRoot.childCount > 1 && delegateRoot.groupDialogRef) {
@@ -439,52 +465,66 @@ Item {
                     return;
                 }
                 if (delegateRoot.isLauncher) {
-                    delegateRoot.tasksModelRef.requestActivate(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestActivate(idx);
                 } else if (delegateRoot.isActive && delegateRoot.minimizeActiveOnClick) {
-                    delegateRoot.tasksModelRef.requestToggleMinimized(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestToggleMinimized(idx);
                 } else {
-                    delegateRoot.tasksModelRef.requestActivate(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestActivate(idx);
                 }
             }
 
             onWheel: function(wheel) {
-                if (!delegateRoot.tasksModelRef || !delegateRoot.modelIndex || delegateRoot.isLauncher) {
+                if (delegateRoot.isLauncher) {
+                    return;
+                }
+                const idx = freshModelIndex();
+                if (!idx) {
                     return;
                 }
                 if (wheel.angleDelta.y > 0) {
-                    delegateRoot.tasksModelRef.requestActivate(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestActivate(idx);
                 } else if (wheel.angleDelta.y < 0 && delegateRoot.isActive && delegateRoot.isMinimizable) {
-                    delegateRoot.tasksModelRef.requestToggleMinimized(delegateRoot.modelIndex);
+                    delegateRoot.tasksModelRef.requestToggleMinimized(idx);
                 }
             }
         }
     }
 
-    // Clickable Audio / Mute Indicator Badge (top-left, above MouseArea so clicks toggle mute directly)
+    // Clickable Audio / Mute Indicator Badge (stock-style symbolic icon, top-right unless count badge occupies it)
     Rectangle {
         id: audioBadge
-        visible: delegateRoot.hasAudioStream && !delegateRoot.showIndexBadge
+        readonly property real badgeSize: Math.round(Math.max(16, Math.min(24, delegateRoot.delegateLogicalSize * 0.28)))
+        readonly property bool countBadgeVisible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
+        visible: delegateRoot.hasAudioStream && !(delegateRoot.showIndexBadge && countBadgeVisible)
         anchors.top: parent.top
-        anchors.left: parent.left
-        width: 22
-        height: 22
-        radius: 11
+        anchors.topMargin: 1
+        anchors.right: countBadgeVisible ? undefined : parent.right
+        anchors.rightMargin: countBadgeVisible ? 0 : 1
+        anchors.left: countBadgeVisible ? parent.left : undefined
+        anchors.leftMargin: countBadgeVisible ? 1 : 0
+        width: badgeSize
+        height: badgeSize
+        radius: badgeSize * 0.5
         color: delegateRoot.isAudioMuted
             ? Kirigami.Theme.negativeTextColor
-            : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.88)
-        border.width: 1
-        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
+            : (audioMouseArea.containsMouse
+                ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.90)
+                : Qt.rgba(0, 0, 0, 0.55))
         z: 15
+
+        Behavior on color { ColorAnimation { duration: 100 } }
 
         Kirigami.Icon {
             anchors.centerIn: parent
-            width: 14
-            height: 14
-            source: delegateRoot.isAudioMuted ? "audio-volume-muted" : "audio-volume-high"
-            color: delegateRoot.isAudioMuted ? "#ffffff" : Kirigami.Theme.textColor
+            width: Math.max(11, Math.round(parent.badgeSize * 0.68))
+            height: width
+            source: delegateRoot.isAudioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
+            isMask: true
+            color: "#ffffff"
         }
 
         MouseArea {
+            id: audioMouseArea
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
