@@ -16,6 +16,38 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(FLUCTUS_BUILD_TESTS "Build unit tests" ON)
 option(FLUCTUS_ENABLE_SANITIZERS "Enable ASan + UBSan for local targets" OFF)
 option(FLUCTUS_REQUIRE_ECM "Fail if extra-cmake-modules (ECM) is not installed" OFF)
+option(FLUCTUS_USE_PCH "Use precompiled headers to speed up C++ builds" ON)
+option(FLUCTUS_USE_FAST_LINKER "Prefer mold or lld when available" ON)
+
+# Auto-detect compiler cache (sccache / ccache) when not explicitly configured
+if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(FLUCTUS_CCACHE_PROGRAM NAMES sccache ccache)
+    if(FLUCTUS_CCACHE_PROGRAM)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${FLUCTUS_CCACHE_PROGRAM}")
+        message(STATUS "Using compiler launcher: ${FLUCTUS_CCACHE_PROGRAM}")
+    endif()
+endif()
+
+# Prefer a fast linker (mold or lld) when available
+if(FLUCTUS_USE_FAST_LINKER AND NOT CMAKE_LINKER_TYPE)
+    find_program(FLUCTUS_MOLD_LINKER mold)
+    find_program(FLUCTUS_LLD_LINKER lld)
+    if(FLUCTUS_MOLD_LINKER)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.29")
+            set(CMAKE_LINKER_TYPE MOLD)
+        else()
+            add_link_options(-fuse-ld=mold)
+        endif()
+        message(STATUS "Using fast linker: mold")
+    elseif(FLUCTUS_LLD_LINKER)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.29")
+            set(CMAKE_LINKER_TYPE LLD)
+        else()
+            add_link_options(-fuse-ld=lld)
+        endif()
+        message(STATUS "Using fast linker: lld")
+    endif()
+endif()
 
 find_package(ECM 6.0.0 QUIET NO_MODULE)
 if(ECM_FOUND)
@@ -91,44 +123,64 @@ set_target_properties(fluctus_core PROPERTIES
 )
 
 # -----------------------------------------------------------------------------
-# Qt Quick Layer (DockLayoutItem, DockAnimationDriver, BlurRegionController)
+# Qt Quick Layer (used by unit tests or non-ECM builds; compiled directly into
+# the Plasma applet target when ECM is present to avoid duplicate builds)
 # -----------------------------------------------------------------------------
-add_library(fluctus_quick STATIC
-    src/quick/DockAnimationDriver.hpp
-    src/quick/DockAnimationDriver.cpp
-    src/quick/BlurRegionController.hpp
-    src/quick/BlurRegionController.cpp
-    src/quick/DockLayoutItem.hpp
-    src/quick/DockLayoutItem.cpp
-)
+if(FLUCTUS_BUILD_TESTS OR NOT ECM_FOUND)
+    add_library(fluctus_quick STATIC
+        src/quick/DockAnimationDriver.hpp
+        src/quick/DockAnimationDriver.cpp
+        src/quick/BlurRegionController.hpp
+        src/quick/BlurRegionController.cpp
+        src/quick/DockLayoutItem.hpp
+        src/quick/DockLayoutItem.cpp
+    )
 
-target_include_directories(fluctus_quick PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+    target_include_directories(fluctus_quick PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
 
-target_link_libraries(fluctus_quick
-    PUBLIC
-        fluctus_core
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Qml
-        Qt6::Quick
-    PRIVATE
-        fluctus_warnings
-        KF6::WindowSystem
-)
+    target_link_libraries(fluctus_quick
+        PUBLIC
+            fluctus_core
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+        PRIVATE
+            fluctus_warnings
+            KF6::WindowSystem
+    )
 
-set_target_properties(fluctus_quick PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-)
+    set_target_properties(fluctus_quick PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+    )
+
+    if(FLUCTUS_USE_PCH)
+        target_precompile_headers(fluctus_quick PRIVATE
+            <QAbstractItemModel>
+            <QObject>
+            <QPointer>
+            <QQmlComponent>
+            <QQuickItem>
+            <QQuickWindow>
+            <QRectF>
+        )
+    endif()
+endif()
 
 # -----------------------------------------------------------------------------
 # Compiled Plasma::Applet (QML embedded into plugin .so)
 # -----------------------------------------------------------------------------
 set(FLUCTUS_QML_SOURCES
     package/contents/ui/main.qml
+    package/contents/ui/AudioStreamTracker.qml
     package/contents/ui/TaskDelegate.qml
+    package/contents/ui/TaskContextMenu.qml
+    package/contents/ui/ToolTipDelegate.qml
+    package/contents/ui/GroupDialog.qml
     package/contents/ui/ConfigAppearance.qml
+    package/contents/ui/ConfigPhysics.qml
     package/contents/ui/ConfigBehavior.qml
     package/contents/config/config.qml
 )
@@ -138,8 +190,13 @@ set(FLUCTUS_RESOURCES
 )
 
 set_source_files_properties(package/contents/ui/main.qml PROPERTIES QT_RESOURCE_ALIAS main.qml)
+set_source_files_properties(package/contents/ui/AudioStreamTracker.qml PROPERTIES QT_RESOURCE_ALIAS AudioStreamTracker.qml)
 set_source_files_properties(package/contents/ui/TaskDelegate.qml PROPERTIES QT_RESOURCE_ALIAS TaskDelegate.qml)
+set_source_files_properties(package/contents/ui/TaskContextMenu.qml PROPERTIES QT_RESOURCE_ALIAS TaskContextMenu.qml)
+set_source_files_properties(package/contents/ui/ToolTipDelegate.qml PROPERTIES QT_RESOURCE_ALIAS ToolTipDelegate.qml)
+set_source_files_properties(package/contents/ui/GroupDialog.qml PROPERTIES QT_RESOURCE_ALIAS GroupDialog.qml)
 set_source_files_properties(package/contents/ui/ConfigAppearance.qml PROPERTIES QT_RESOURCE_ALIAS ConfigAppearance.qml)
+set_source_files_properties(package/contents/ui/ConfigPhysics.qml PROPERTIES QT_RESOURCE_ALIAS ConfigPhysics.qml)
 set_source_files_properties(package/contents/ui/ConfigBehavior.qml PROPERTIES QT_RESOURCE_ALIAS ConfigBehavior.qml)
 set_source_files_properties(package/contents/config/config.qml PROPERTIES QT_RESOURCE_ALIAS config.qml)
 set_source_files_properties(package/contents/config/main.xml PROPERTIES QT_RESOURCE_ALIAS main.xml)
@@ -148,6 +205,8 @@ if(ECM_FOUND)
     find_package(KF6CoreAddons 6.0 REQUIRED)
     find_package(KF6I18n 6.0 REQUIRED)
     find_package(KF6GlobalAccel 6.0 REQUIRED)
+    find_package(KF6Service 6.0 REQUIRED)
+    find_package(KF6KIO 6.0 REQUIRED)
     find_package(Plasma 6.0 REQUIRED)
     find_package(LibTaskManager REQUIRED)
 
@@ -163,6 +222,10 @@ if(ECM_FOUND)
             src/quick/DockLayoutItem.cpp
             src/backend/ShortcutManager.hpp
             src/backend/ShortcutManager.cpp
+            src/backend/SmartLauncherBackend.hpp
+            src/backend/SmartLauncherBackend.cpp
+            src/backend/TaskBackend.hpp
+            src/backend/TaskBackend.cpp
             src/backend/FluctusApplet.hpp
             src/backend/FluctusApplet.cpp
     )
@@ -186,7 +249,21 @@ if(ECM_FOUND)
         KF6::I18n
         KF6::WindowSystem
         KF6::GlobalAccel
+        KF6::Service
+        KF6::KIOGui
     )
+
+    if(FLUCTUS_USE_PCH)
+        target_precompile_headers(${FLUCTUS_APPLET_ID} PRIVATE
+            <QAbstractItemModel>
+            <QObject>
+            <QPointer>
+            <QQmlComponent>
+            <QQuickItem>
+            <QQuickWindow>
+            <QRectF>
+        )
+    endif()
 
     # Bundled Plasma/LayoutTemplate for a pre-configured dock panel
     install(

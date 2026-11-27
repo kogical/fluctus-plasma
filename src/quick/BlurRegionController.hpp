@@ -22,6 +22,8 @@ public:
 
     void setWindow(QWindow *window);
     void setEnabled(bool enabled);
+    /// 0 = Frosted Glass, 1 = Liquid Glass, 2 = Acrylic, 3 = Clear Blur, 4 = Solid (No Blur)
+    void setBlurStyle(int style);
     void setCornerRadius(qreal radius);
     void setWindowPillRect(const QRectF &rectInWindow);
     void reapply();
@@ -33,6 +35,9 @@ private:
 
     QPointer<QWindow> m_window;
     bool m_enabled{true};
+    int m_blurStyle{0};
+    bool m_appliedBlur{false};
+    bool m_appliedContrast{false};
     qreal m_cornerRadius{16.0};
     QRectF m_windowPillRect;
 };

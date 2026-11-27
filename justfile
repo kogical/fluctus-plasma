@@ -6,23 +6,32 @@ restart := "ask"
 default:
     @just --list
 
-# Configure and build in Release mode (never under sudo)
+# Configure (only when build.ninja is missing) and build in Release mode (never under sudo)
 build:
-    cmake --preset release -DCMAKE_INSTALL_PREFIX={{prefix}}
+    @if [ ! -f "{{build_dir}}/build.ninja" ]; then cmake --preset release -DCMAKE_INSTALL_PREFIX={{prefix}}; fi
     cmake --build --preset release
+
+# Build only the Plasma applet plugin (skips unit test binaries for faster iteration)
+build-applet:
+    @if [ ! -f "{{build_dir}}/build.ninja" ]; then cmake --preset release -DCMAKE_INSTALL_PREFIX={{prefix}}; fi
+    cmake --build --preset release --target com.kogical.fluctus
+
+# Force a fresh CMake reconfigure
+reconfigure:
+    cmake --preset release -DCMAKE_INSTALL_PREFIX={{prefix}}
 
 # Build and run unit tests (Release)
 test: build
-    ctest --preset release
+    ctest --preset release --output-on-failure
 
 # Build and run unit tests with AddressSanitizer + UndefinedBehaviorSanitizer
 test-san:
-    cmake --preset debug-asan-ubsan -DCMAKE_INSTALL_PREFIX={{prefix}}
+    @if [ ! -f "build/debug-asan-ubsan/build.ninja" ]; then cmake --preset debug-asan-ubsan -DCMAKE_INSTALL_PREFIX={{prefix}}; fi
     cmake --build --preset debug-asan-ubsan
-    ctest --preset debug-asan-ubsan
+    ctest --preset debug-asan-ubsan --output-on-failure
 
 # Install compiled applet and layout template, persisting install_manifest.txt
-install: build
+install: build-applet
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p "{{state_dir}}"
@@ -75,9 +84,10 @@ uninstall:
     echo "Uninstalled Fluctus Plasma."
 
 # Rebuild, prune stale installed files, reinstall, and optionally restart plasmashell
-update restart=restart: build
+update restart=restart:
     #!/usr/bin/env bash
     set -euo pipefail
+    just build-applet
     manifest="{{state_dir}}/install_manifest.txt"
     if [ -f "$manifest" ]; then
         just uninstall
@@ -107,6 +117,30 @@ update restart=restart: build
             kstart plasmashell >/dev/null 2>&1 &
         fi
     fi
+
+# Export PNG icons (64, 128, 256, 512 px) from docs/branding/logo.svg
+branding:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="docs/branding/logo.svg"
+    out_dir="docs/branding/png"
+    mkdir -p "$out_dir"
+    for size in 64 128 256 512; do
+        out="${out_dir}/logo-${size}.png"
+        if command -v rsvg-convert >/dev/null 2>&1; then
+            rsvg-convert -w "$size" -h "$size" "$src" -o "$out"
+        elif command -v resvg >/dev/null 2>&1; then
+            resvg -w "$size" -h "$size" "$src" "$out"
+        elif command -v magick >/dev/null 2>&1; then
+            magick -background none -density 384 "$src" -resize "${size}x${size}" "$out"
+        elif command -v inkscape >/dev/null 2>&1; then
+            inkscape "$src" --export-type=png --export-width="$size" --export-height="$size" --export-filename="$out" >/dev/null 2>&1
+        else
+            echo "Error: install rsvg-convert (librsvg), resvg, ImageMagick (magick), or inkscape to render PNGs." >&2
+            exit 1
+        fi
+        echo "Generated $out"
+    done
 
 # Remove build artifacts (preserves persisted install manifest)
 clean:

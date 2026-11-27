@@ -10,7 +10,7 @@
         "Description": "Transparent headroom bottom dock panel pre-configured for Fluctus Dock",
         "EnabledByDefault": true,
         "Id": "com.kogical.fluctus.panel",
-        "License": "GPL-2.0-or-later",
+        "License": "MIT",
         "Name": "Fluctus Dock Panel"
     },
     "X-Plasma-ContainmentCategories": [

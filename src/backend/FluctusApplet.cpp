@@ -1,5 +1,7 @@
 #include "backend/FluctusApplet.hpp"
 #include "backend/ShortcutManager.hpp"
+#include "backend/SmartLauncherBackend.hpp"
+#include "backend/TaskBackend.hpp"
 #include "core/BouncePhysics.hpp"
 
 namespace fluctus::backend {
@@ -11,6 +13,12 @@ FluctusApplet::FluctusApplet(
 )
     : Plasma::Applet(parent, data, args) {
     ShortcutManager::instance().registerApplet(this);
+    connect(
+        &SmartLauncherBackend::instance(),
+        &SmartLauncherBackend::entryChanged,
+        this,
+        &FluctusApplet::smartLauncherUpdated
+    );
 }
 
 FluctusApplet::~FluctusApplet() {
@@ -43,6 +51,18 @@ int FluctusApplet::recommendedPanelThickness(
         edgePadding,
         topMargin
     );
+}
+
+QVariantMap FluctusApplet::smartLauncherState(const QString &appId, const QUrl &launcherUrl) const {
+    return SmartLauncherBackend::instance().stateForApp(appId, launcherUrl.toString());
+}
+
+QVariantList FluctusApplet::jumpListActions(const QUrl &launcherUrl) const {
+    return TaskBackend::jumpListActions(launcherUrl);
+}
+
+bool FluctusApplet::triggerJumpListAction(const QUrl &launcherUrl, const QString &actionName) const {
+    return TaskBackend::triggerJumpListAction(launcherUrl, actionName);
 }
 
 K_PLUGIN_CLASS_WITH_JSON(FluctusApplet, "../../package/metadata.json")

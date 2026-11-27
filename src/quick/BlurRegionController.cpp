@@ -45,6 +45,15 @@ void BlurRegionController::setEnabled(bool enabled) {
     reapply();
 }
 
+void BlurRegionController::setBlurStyle(int style) {
+    const int clamped = std::clamp(style, 0, 4);
+    if (m_blurStyle == clamped) {
+        return;
+    }
+    m_blurStyle = clamped;
+    reapply();
+}
+
 void BlurRegionController::setCornerRadius(qreal radius) {
     const qreal clamped = std::max<qreal>(0.0, radius);
     if (qFuzzyCompare(m_cornerRadius, clamped)) {
@@ -83,8 +92,16 @@ QRegion BlurRegionController::buildRoundedRegion(const QRectF &rect, qreal corne
 }
 
 void BlurRegionController::clearBlurOnWindow(QWindow *window) {
-    if (window) {
+    if (!window) {
+        return;
+    }
+    if (m_appliedBlur) {
         KWindowEffects::enableBlurBehind(window, false);
+        m_appliedBlur = false;
+    }
+    if (m_appliedContrast) {
+        KWindowEffects::enableBackgroundContrast(window, false);
+        m_appliedContrast = false;
     }
 }
 
@@ -93,18 +110,43 @@ void BlurRegionController::reapply() {
         return;
     }
 
-    if (!m_enabled || m_windowPillRect.isEmpty()) {
-        KWindowEffects::enableBlurBehind(m_window, false);
+    if (!m_enabled || m_blurStyle == 4 || m_windowPillRect.isEmpty()) {
+        clearBlurOnWindow(m_window);
         return;
     }
 
     const QRegion region = buildRoundedRegion(m_windowPillRect, m_cornerRadius);
     if (region.isEmpty()) {
-        KWindowEffects::enableBlurBehind(m_window, false);
+        clearBlurOnWindow(m_window);
         return;
     }
 
     KWindowEffects::enableBlurBehind(m_window, true, region);
+    m_appliedBlur = true;
+
+    // Apply compositor background contrast presets per blur style:
+    // 0 = Frosted Glass, 1 = Liquid Glass (vibrant/refractive), 2 = Acrylic, 3 = Clear Blur (blur only)
+    switch (m_blurStyle) {
+    case 0:
+        KWindowEffects::enableBackgroundContrast(m_window, true, 1.15, 1.05, 1.25, region);
+        m_appliedContrast = true;
+        break;
+    case 1:
+        KWindowEffects::enableBackgroundContrast(m_window, true, 1.38, 1.18, 1.85, region);
+        m_appliedContrast = true;
+        break;
+    case 2:
+        KWindowEffects::enableBackgroundContrast(m_window, true, 1.08, 0.94, 1.12, region);
+        m_appliedContrast = true;
+        break;
+    case 3:
+    default:
+        if (m_appliedContrast) {
+            KWindowEffects::enableBackgroundContrast(m_window, false);
+            m_appliedContrast = false;
+        }
+        break;
+    }
 }
 
 } // namespace fluctus::quick

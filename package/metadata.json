@@ -10,7 +10,7 @@
         "Description": "macOS-style animated task manager dock built in modern C++23 for Plasma 6.8+",
         "Icon": "preferences-system-windows",
         "Id": "com.kogical.fluctus",
-        "License": "GPL-2.0-or-later",
+        "License": "MIT",
         "Name": "Fluctus Dock"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
