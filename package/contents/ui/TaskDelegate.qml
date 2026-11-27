@@ -217,16 +217,12 @@ Item {
         width: delegateRoot.isHorizontalDock ? primaryLen : crossLen
         height: delegateRoot.isHorizontalDock ? crossLen : primaryLen
 
-        anchors.horizontalCenter: delegateRoot.isHorizontalDock ? parent.horizontalCenter : undefined
-        anchors.verticalCenter: !delegateRoot.isHorizontalDock ? parent.verticalCenter : undefined
-        anchors.bottom: delegateRoot.dockEdge === 0 ? parent.bottom : undefined
-        anchors.top: delegateRoot.dockEdge === 1 ? parent.top : undefined
-        anchors.left: delegateRoot.dockEdge === 2 ? parent.left : undefined
-        anchors.right: delegateRoot.dockEdge === 3 ? parent.right : undefined
-        anchors.bottomMargin: delegateRoot.dockEdge === 0 ? edgeInset : 0
-        anchors.topMargin: delegateRoot.dockEdge === 1 ? edgeInset : 0
-        anchors.leftMargin: delegateRoot.dockEdge === 2 ? edgeInset : 0
-        anchors.rightMargin: delegateRoot.dockEdge === 3 ? edgeInset : 0
+        x: delegateRoot.isHorizontalDock
+            ? (parent.width - width) * 0.5
+            : (delegateRoot.dockEdge === 2 ? edgeInset : (parent.width - width - edgeInset))
+        y: !delegateRoot.isHorizontalDock
+            ? (parent.height - height) * 0.5
+            : (delegateRoot.dockEdge === 1 ? edgeInset : (parent.height - height - edgeInset))
 
         // Soft accent glow for Glowing Underline style
         Rectangle {
@@ -496,12 +492,8 @@ Item {
         readonly property real badgeSize: Math.round(Math.max(16, Math.min(24, delegateRoot.delegateLogicalSize * 0.28)))
         readonly property bool countBadgeVisible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
         visible: delegateRoot.hasAudioStream && !(delegateRoot.showIndexBadge && countBadgeVisible)
-        anchors.top: parent.top
-        anchors.topMargin: 1
-        anchors.right: countBadgeVisible ? undefined : parent.right
-        anchors.rightMargin: countBadgeVisible ? 0 : 1
-        anchors.left: countBadgeVisible ? parent.left : undefined
-        anchors.leftMargin: countBadgeVisible ? 1 : 0
+        x: countBadgeVisible ? 1 : (parent.width - width - 1)
+        y: 1
         width: badgeSize
         height: badgeSize
         radius: badgeSize * 0.5
