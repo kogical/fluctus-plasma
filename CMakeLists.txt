@@ -132,6 +132,8 @@ if(FLUCTUS_BUILD_TESTS OR NOT ECM_FOUND)
         src/quick/DockAnimationDriver.cpp
         src/quick/BlurRegionController.hpp
         src/quick/BlurRegionController.cpp
+        src/quick/DockIconItem.hpp
+        src/quick/DockIconItem.cpp
         src/quick/DockLayoutItem.hpp
         src/quick/DockLayoutItem.cpp
     )
@@ -219,6 +221,8 @@ if(ECM_FOUND)
             src/quick/DockAnimationDriver.cpp
             src/quick/BlurRegionController.hpp
             src/quick/BlurRegionController.cpp
+            src/quick/DockIconItem.hpp
+            src/quick/DockIconItem.cpp
             src/quick/DockLayoutItem.hpp
             src/quick/DockLayoutItem.cpp
             src/backend/ShortcutManager.hpp

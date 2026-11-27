@@ -1,4 +1,5 @@
 #include "quick/BlurRegionController.hpp"
+#include "quick/DockIconItem.hpp"
 #include "quick/DockLayoutItem.hpp"
 
 #include <QQmlComponent>
@@ -525,6 +526,50 @@ private Q_SLOTS:
         pix2.fill(Qt::blue);
         model.item(0)->setIcon(QIcon(pix2));
         QCOMPARE(first->property("iconWrites").toInt(), iconWritesBefore + 1);
+    }
+
+    void testLanczos3IconResamplerPreservesSharpnessAndPremultipliedBounds() {
+        // High-contrast 256x256 icon with transparent border and crisp inner square.
+        QImage src(256, 256, QImage::Format_RGBA8888_Premultiplied);
+        src.fill(Qt::transparent);
+        for (int y = 32; y < 224; ++y) {
+            std::uint8_t *line = src.scanLine(y);
+            for (int x = 32; x < 224; ++x) {
+                const bool stripe = ((x / 16) % 2) == 0;
+                line[x * 4 + 0] = stripe ? 255 : 20;
+                line[x * 4 + 1] = stripe ? 255 : 140;
+                line[x * 4 + 2] = stripe ? 255 : 240;
+                line[x * 4 + 3] = 255;
+            }
+        }
+
+        const QImage out = DockIconItem::resampleLanczos3(src, 25, 25);
+        QCOMPARE(out.size(), QSize(25, 25));
+        QCOMPARE(out.format(), QImage::Format_RGBA8888_Premultiplied);
+
+        // Verify strict premultiplied-alpha bounds (0 <= r,g,b <= a) on every pixel.
+        for (int y = 0; y < out.height(); ++y) {
+            const std::uint8_t *line = out.constScanLine(y);
+            for (int x = 0; x < out.width(); ++x) {
+                const std::uint8_t r = line[x * 4 + 0];
+                const std::uint8_t g = line[x * 4 + 1];
+                const std::uint8_t b = line[x * 4 + 2];
+                const std::uint8_t a = line[x * 4 + 3];
+                QVERIFY(r <= a && g <= a && b <= a);
+            }
+        }
+
+        // Outer corner remains transparent; center remains opaque.
+        QCOMPARE(out.constScanLine(0)[3], std::uint8_t{0});
+        QCOMPARE(out.constScanLine(12)[12 * 4 + 3], std::uint8_t{255});
+
+        // Non-square source preserves aspect ratio inside square target.
+        QImage wide(128, 64, QImage::Format_RGBA8888_Premultiplied);
+        wide.fill(Qt::red);
+        const QImage wideOut = DockIconItem::resampleLanczos3(wide, 24, 24);
+        QCOMPARE(wideOut.size(), QSize(24, 24));
+        QCOMPARE(wideOut.constScanLine(0)[12 * 4 + 3], std::uint8_t{0});
+        QCOMPARE(wideOut.constScanLine(12)[12 * 4 + 3], std::uint8_t{255});
     }
 };
 

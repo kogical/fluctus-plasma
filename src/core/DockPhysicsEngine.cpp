@@ -812,11 +812,23 @@ DockFrame DockPhysicsEngine::computeFrame(double containerWidth, double containe
             displayCenterCanonical, originP, restingLength
         );
 
+        const double visualSize = metrics.baseIconSize * scale * w;
         if (settledAtRest) {
-            primaryCenter = snapToDevicePixel(primaryCenter, dpr);
+            const double snappedLead = snapToDevicePixel(primaryCenter - visualSize * 0.5, dpr);
+            primaryCenter = snappedLead + visualSize * 0.5;
         }
 
-        const double visualSize = metrics.baseIconSize * scale * w;
+        double effectiveEdgePadding = m_config.edgePadding;
+        if (settledAtRest) {
+            if (m_config.axis.edge == DockEdge::Bottom || m_config.axis.edge == DockEdge::Right) {
+                const double containerCross = m_config.axis.crossExtent(containerWidth, containerHeight);
+                const double snappedBase = snapToDevicePixel(containerCross - effectiveEdgePadding, dpr);
+                effectiveEdgePadding = containerCross - snappedBase;
+            } else {
+                effectiveEdgePadding = snapToDevicePixel(effectiveEdgePadding, dpr);
+            }
+        }
+
         const double delegateScale = (scale * w) * invDelegateRatio;
 
         DockSlotLayout out{};
@@ -836,7 +848,7 @@ DockFrame DockPhysicsEngine::computeFrame(double containerWidth, double containe
             delegateSize,
             containerWidth,
             containerHeight,
-            m_config.edgePadding,
+            effectiveEdgePadding,
             out.bounceOffset
         );
 

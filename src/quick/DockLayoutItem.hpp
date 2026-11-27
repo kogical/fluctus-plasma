@@ -60,6 +60,7 @@ class DockLayoutItem : public QQuickItem {
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(qreal delegateLogicalSize READ delegateLogicalSize NOTIFY configChanged)
     Q_PROPERTY(qreal effectiveBaseIconSize READ effectiveBaseIconSize NOTIFY configChanged)
+    Q_PROPERTY(qreal devicePixelRatio READ devicePixelRatio NOTIFY configChanged)
     Q_PROPERTY(bool hasAttentionTask READ hasAttentionTask NOTIFY hasAttentionTaskChanged)
 
 public:
@@ -148,6 +149,7 @@ public:
     [[nodiscard]] qreal delegateLogicalSize() const noexcept {
         return m_engine.effectiveDelegateLogicalSize(width(), height());
     }
+    [[nodiscard]] qreal devicePixelRatio() const noexcept { return m_config.devicePixelRatio; }
     [[nodiscard]] qreal effectiveBaseIconSize() const noexcept {
         return m_engine.effectiveBaseIconSize(width(), height());
     }
