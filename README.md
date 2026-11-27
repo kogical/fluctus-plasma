@@ -6,6 +6,7 @@
 
 **A smooth, native macOS-style animated task manager dock for KDE Plasma 6.8+**
 
+[![CI](https://github.com/kogical/fluctus-plasma/actions/workflows/ci.yml/badge.svg)](https://github.com/kogical/fluctus-plasma/actions/workflows/ci.yml)
 [![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.8%2B-1D99F3?logo=kde&logoColor=white)](https://kde.org/plasma-desktop/)
 [![Wayland](https://img.shields.io/badge/Wayland-Native-FFBC00?logo=wayland&logoColor=black)](https://wayland.freedesktop.org/)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org/)
@@ -22,11 +23,11 @@
 - **Panel Colorizer & Theme Friendly** — Ships in **Default (Panel Managed)** mode out of the box so your Plasma panel theme or tools like **Panel Colorizer** can style the background and blur natively.
 - **Custom Glass & Blur Materials** — Switch to **Custom Glass Pill** for **Liquid Glass**, **Frosted Glass**, **Acrylic**, **Clear Blur**, or **Solid** surfaces with customizable tint, opacity, corner radius, borders, and padding — or pick **Plasma Theme Surface** / **Transparent**.
 - **Full KDE Task Manager Integration**:
-  - **Pin & Unpin** apps via the native KDE right-click context menu or by dragging apps directly onto the dock.
-  - **Drag to Reorder** icons smoothly and drop files onto app icons to open them.
+  - **Pin & Unpin** apps via the native KDE right-click context menu (including per-activity pinning), by dragging apps onto the dock, or by dragging pinned icons off the dock.
+  - **Smooth Spring Drag Reordering** with a live insertion guide, plus file drop-to-open and hover-to-raise on minimized windows/groups.
+  - **Clickable Audio / Mute Badges** for apps playing sound, **SmartLauncher** unread counts & progress bars, and customizable running indicator styles.
   - **Jump Lists**, virtual desktop switching, and window actions in the context menu.
   - **Live PipeWire Window Previews** & **MPRIS Media Controls** in hover tooltips.
-  - **SmartLauncher** unread count badges and progress bars.
   - **Group Window Picker** for multi-window apps and **Meta+1..9** shortcut support.
 
 ---
@@ -59,6 +60,11 @@ cmake --preset release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build --preset release
 sudo cmake --install build/release
 ```
+
+### Arch Linux (`PKGBUILD`) & Nix (`flake.nix`)
+
+- **Arch Linux**: `cd packaging/arch && makepkg -si`
+- **Nix Flakes**: `nix build` (or `nix develop` for a dev shell)
 
 ### Updating & Uninstalling
 
