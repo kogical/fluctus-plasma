@@ -349,6 +349,50 @@ private Q_SLOTS:
         QCOMPARE(engine.restingDragTargetIndex(Vec2{boundaryX + 20.0, H - 10.0}, W, H, 0), std::size_t{1});
         QCOMPARE(engine.restingDragTargetIndex(Vec2{boundaryX - 2.0, H - 10.0}, W, H, 1), std::size_t{1});
     }
+
+    void testCompactRestingPixelAlignment() {
+        // Odd compact icon size at 1x and fractional 1.5x DPR must align the visual leading edge
+        // (and cross-axis edge base) to exact physical pixels when settled at rest.
+        for (double dpr : {1.0, 1.5, 2.0}) {
+            DockPhysicsEngine engine{};
+            DockConfig cfg{};
+            cfg.baseIconSize = 23.0;
+            cfg.iconSpacing = 4.0;
+            cfg.maxScale = 1.5;
+            cfg.edgePadding = 5.0;
+            cfg.topMargin = 5.0;
+            cfg.devicePixelRatio = dpr;
+            engine.setConfig(cfg);
+
+            for (std::size_t i = 0; i < 6; ++i) {
+                engine.insertSlot(i, false);
+            }
+
+            const double W = 400.0;
+            const double H = 45.0;
+            engine.step(1.0 / 60.0, W, H);
+            QVERIFY(engine.isSettled());
+
+            const DockFrame frame = engine.computeFrame(W, H);
+            QCOMPARE(frame.items.size(), std::size_t{6});
+            for (const auto &slot : frame.items) {
+                const double visualSize = cfg.baseIconSize * slot.scale * slot.weight;
+                const double visualLeadPx = (slot.primaryCenter - visualSize * 0.5) * dpr;
+                QVERIFY2(
+                    std::abs(visualLeadPx - std::round(visualLeadPx)) < 1e-6,
+                    qPrintable(QStringLiteral("Unaligned visual lead at dpr=%1: %2 px")
+                                   .arg(dpr).arg(visualLeadPx))
+                );
+                const double delegateSize = engine.effectiveDelegateLogicalSize(W, H);
+                const double visualBottomPx = (slot.delegateTopLeft.y + delegateSize) * dpr;
+                QVERIFY2(
+                    std::abs(visualBottomPx - std::round(visualBottomPx)) < 1e-6,
+                    qPrintable(QStringLiteral("Unaligned visual bottom at dpr=%1: %2 px")
+                                   .arg(dpr).arg(visualBottomPx))
+                );
+            }
+        }
+    }
 };
 
 QTEST_MAIN(DockPhysicsTest)

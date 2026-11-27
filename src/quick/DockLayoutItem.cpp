@@ -1331,6 +1331,7 @@ void DockLayoutItem::refreshDevicePixelRatio() {
     if (!qFuzzyCompare(m_config.devicePixelRatio, dpr)) {
         m_config.devicePixelRatio = dpr;
         m_engine.setConfig(m_config);
+        Q_EMIT configChanged();
     }
 }
 

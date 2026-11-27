@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
@@ -64,6 +65,13 @@ Item {
     property int smartLauncherRevision: 0
 
     readonly property bool isHorizontalDock: dockEdge === 0 || dockEdge === 1
+    readonly property int iconMargin: delegateRoot.delegateLogicalSize >= 48 ? 2 : 1
+    readonly property real effectiveBaseSize: dockLayoutRef
+        ? Math.max(16, dockLayoutRef.effectiveBaseIconSize)
+        : Math.max(16, delegateRoot.delegateLogicalSize)
+    readonly property real restingScale: Math.max(0.01, effectiveBaseSize / Math.max(1, delegateRoot.delegateLogicalSize))
+    readonly property int restingIconSize: Math.max(16, Math.round(effectiveBaseSize) - 2 * iconMargin)
+    readonly property bool isMagnifying: delegateRoot.slotScale > 1.001
     readonly property bool isPinned: launcherUrl.toString().length > 0 && tasksModelRef
         ? tasksModelRef.launcherPosition(launcherUrl) >= 0
         : false
@@ -96,38 +104,64 @@ Item {
     Item {
         id: reflectionHolder
         visible: delegateRoot.showReflection && delegateRoot.dockEdge === 0
-        anchors.left: iconItem.left
-        anchors.right: iconItem.right
-        anchors.top: iconItem.bottom
-        height: iconItem.height * 0.38
+        anchors.left: iconHolder.left
+        anchors.right: iconHolder.right
+        anchors.top: iconHolder.bottom
+        height: iconHolder.height * 0.38
         clip: true
         opacity: 0.24
 
         Kirigami.Icon {
-            width: iconItem.width
-            height: iconItem.height
+            width: iconHolder.width
+            height: iconHolder.height
             source: delegateRoot.decorationIcon
+            roundToIconSize: false
             smooth: true
             transform: Scale {
-                origin.y: iconItem.height * 0.5
+                origin.y: iconHolder.height * 0.5
                 yScale: -1
             }
         }
     }
 
-    Kirigami.Icon {
-        id: iconItem
+    Item {
+        id: iconHolder
         anchors.fill: parent
-        anchors.margins: 2
-        source: delegateRoot.decorationIcon
-        active: mouseArea.containsMouse
-        smooth: true
+        anchors.margins: delegateRoot.iconMargin
         opacity: mouseArea.draggedOutsideToUnpin ? 0.32 : (mouseArea.isDragging ? 0.72 : 1.0)
-        layer.enabled: delegateRoot.enableMipmap
-        layer.mipmap: delegateRoot.enableMipmap
-        layer.smooth: true
 
         Behavior on opacity { NumberAnimation { duration: 110 } }
+
+        // Crisp 1:1 resting icon: Lanczos-3 downsampled from high-resolution QIcon/SVG artwork
+        // directly to the exact physical resting size, counter-scaling delegateRoot's restingScale
+        // so the combined GPU transform is identically 1.0 with nearest-texel 1:1 sampling.
+        DockIconItem {
+            id: restingIcon
+            visible: !delegateRoot.isMagnifying
+            width: delegateRoot.restingIconSize
+            height: delegateRoot.restingIconSize
+            transformOrigin: Item.TopLeft
+            scale: 1.0 / delegateRoot.restingScale
+            x: delegateRoot.dockEdge === 3
+                ? (delegateRoot.width - (delegateRoot.iconMargin + width) / delegateRoot.restingScale) - delegateRoot.iconMargin
+                : (delegateRoot.iconMargin / delegateRoot.restingScale) - delegateRoot.iconMargin
+            y: delegateRoot.dockEdge === 0
+                ? (delegateRoot.height - (delegateRoot.iconMargin + height) / delegateRoot.restingScale) - delegateRoot.iconMargin
+                : (delegateRoot.iconMargin / delegateRoot.restingScale) - delegateRoot.iconMargin
+            source: delegateRoot.decorationIcon
+            active: mouseArea.containsMouse
+            exactPixelSampling: true
+        }
+
+        // Full-resolution magnified icon shown while hovering/zooming (Lanczos-3 at peak zoom).
+        DockIconItem {
+            id: zoomIcon
+            visible: delegateRoot.isMagnifying
+            anchors.fill: parent
+            source: delegateRoot.decorationIcon
+            active: mouseArea.containsMouse
+            exactPixelSampling: false
+        }
     }
 
     // Drag-off-to-unpin visual badge cue
@@ -146,153 +180,6 @@ Item {
             text: i18n("Unpin")
             color: "#ffffff"
             font.pixelSize: 11
-            font.bold: true
-        }
-    }
-
-    // SmartLauncher progress bar (bottom of icon)
-    Rectangle {
-        visible: delegateRoot.smartProgressVisible
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 6
-        anchors.rightMargin: 6
-        anchors.bottomMargin: 8
-        height: 4
-        radius: 2
-        color: Qt.rgba(0, 0, 0, 0.55)
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: Math.max(0, Math.min(parent.width, parent.width * delegateRoot.smartProgress))
-            radius: 2
-            color: Kirigami.Theme.highlightColor
-        }
-    }
-
-    // Customizable Running / Active / Attention Indicator
-    // indicatorStyle: 0 = Pill Bar, 1 = Classic Dot, 2 = Glowing Underline, 3 = Minimal Line, 4 = None
-    // indicatorPosition: 0 = Screen Edge (Outer), 1 = Inside Icon
-    Item {
-        id: indicatorHolder
-        visible: delegateRoot.indicatorStyle !== 4
-            && (delegateRoot.isWindow || delegateRoot.isGroupParent || delegateRoot.isDemandingAttention)
-
-        readonly property real edgeInset: delegateRoot.indicatorPosition === 1 ? 4 : 0
-        readonly property real primaryLen: {
-            const s = delegateRoot.delegateLogicalSize;
-            switch (delegateRoot.indicatorStyle) {
-            case 1: // Classic Dot
-                return Math.max(6, s * 0.10);
-            case 2: // Glowing Underline
-                return delegateRoot.isActive ? Math.max(18, s * 0.42) : Math.max(10, s * 0.22);
-            case 3: // Minimal Line
-                return delegateRoot.isActive ? Math.max(14, s * 0.30) : Math.max(8, s * 0.16);
-            case 0: // Pill Bar (Default)
-            default:
-                return delegateRoot.isActive ? Math.max(12, s * 0.24) : Math.max(6, s * 0.11);
-            }
-        }
-        readonly property real crossLen: {
-            const s = delegateRoot.delegateLogicalSize;
-            switch (delegateRoot.indicatorStyle) {
-            case 1: // Classic Dot
-                return Math.max(6, s * 0.10);
-            case 2: // Glowing Underline
-                return Math.max(4, s * 0.065);
-            case 3: // Minimal Line
-                return 2.5;
-            case 0: // Pill Bar
-            default:
-                return Math.max(5, s * 0.08);
-            }
-        }
-        readonly property color indicatorColor: delegateRoot.isDemandingAttention
-            ? Kirigami.Theme.negativeTextColor
-            : (delegateRoot.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
-
-        width: delegateRoot.isHorizontalDock ? primaryLen : crossLen
-        height: delegateRoot.isHorizontalDock ? crossLen : primaryLen
-
-        x: delegateRoot.isHorizontalDock
-            ? (parent.width - width) * 0.5
-            : (delegateRoot.dockEdge === 2 ? edgeInset : (parent.width - width - edgeInset))
-        y: !delegateRoot.isHorizontalDock
-            ? (parent.height - height) * 0.5
-            : (delegateRoot.dockEdge === 1 ? edgeInset : (parent.height - height - edgeInset))
-
-        // Soft accent glow for Glowing Underline style
-        Rectangle {
-            visible: delegateRoot.indicatorStyle === 2
-            anchors.centerIn: parent
-            width: parent.width + 6
-            height: parent.height + 4
-            radius: Math.min(width, height) * 0.5
-            color: indicatorHolder.indicatorColor
-            opacity: delegateRoot.isActive ? 0.35 : 0.18
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.min(width, height) * 0.5
-            color: indicatorHolder.indicatorColor
-            opacity: delegateRoot.isMinimized ? 0.45 : 0.95
-        }
-    }
-
-    // SmartLauncher unread count badge OR group count badge (top-right)
-    Rectangle {
-        readonly property real badgeSize: Math.round(Math.max(14, Math.min(26, delegateRoot.delegateLogicalSize * 0.26)))
-        visible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
-        anchors.top: parent.top
-        anchors.right: parent.right
-        width: Math.max(badgeSize, countLabel.implicitWidth + Math.round(badgeSize * 0.5))
-        height: badgeSize
-        radius: badgeSize * 0.5
-        color: delegateRoot.smartCountVisible ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.highlightColor
-
-        Text {
-            id: countLabel
-            anchors.centerIn: parent
-            text: delegateRoot.smartCountVisible
-                ? (delegateRoot.smartCount > 99 ? "99+" : String(delegateRoot.smartCount))
-                : String(delegateRoot.childCount)
-            color: "#ffffff"
-            font.pixelSize: Math.max(9, Math.round(parent.badgeSize * 0.6))
-            font.bold: true
-        }
-    }
-
-    // Shortcut index badge (shown smoothly while holding Meta when enabled in settings)
-    Rectangle {
-        readonly property real badgeSize: Math.round(Math.max(15, Math.min(24, delegateRoot.delegateLogicalSize * 0.28)))
-        readonly property bool badgeActive: delegateRoot.showIndexBadge && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
-        visible: opacity > 0.01 && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
-        opacity: badgeActive ? 1.0 : 0.0
-        scale: badgeActive ? 1.0 : 0.82
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.topMargin: 1
-        anchors.leftMargin: 1
-        width: badgeSize
-        height: badgeSize
-        radius: Math.max(4, Math.round(badgeSize * 0.28))
-        color: Qt.rgba(0, 0, 0, 0.72)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.22)
-        z: 12
-
-        Behavior on opacity { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-
-        Text {
-            anchors.centerIn: parent
-            text: String(delegateRoot.taskIndex + 1)
-            color: "#ffffff"
-            font.pixelSize: Math.max(9, Math.round(parent.badgeSize * 0.58))
             font.bold: true
         }
     }
@@ -486,48 +373,290 @@ Item {
         }
     }
 
-    // Clickable Audio / Mute Indicator Badge (stock-style symbolic icon, top-right unless count badge occupies it)
-    Rectangle {
-        id: audioBadge
-        readonly property real badgeSize: Math.round(Math.max(16, Math.min(24, delegateRoot.delegateLogicalSize * 0.28)))
-        readonly property bool countBadgeVisible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
-        visible: delegateRoot.hasAudioStream && !(delegateRoot.showIndexBadge && countBadgeVisible)
-        x: countBadgeVisible ? 1 : (parent.width - width - 1)
-        y: 1
-        width: badgeSize
-        height: badgeSize
-        radius: badgeSize * 0.5
-        color: delegateRoot.isAudioMuted
-            ? Kirigami.Theme.negativeTextColor
-            : (audioMouseArea.containsMouse
-                ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.90)
-                : Qt.rgba(0, 0, 0, 0.55))
+    // ── Pixel-exact overlay layer ────────────────────────────────────────────────
+    // The delegate is authored at its *magnified* logical size and GPU-scaled down by
+    // restingScale at rest, so anything drawn directly in it lands on fractional pixels and
+    // is resampled (blurry dots, smeared symbolic glyphs, 4 px text). This layer counter-scales
+    // by exactly 1 / restingScale, so at rest its children map 1:1 onto physical pixels. It is
+    // anchored to the corner DockPhysicsEngine snaps to the device-pixel grid when settled, and
+    // every coordinate below is an integer number of physical pixels.
+    // While magnifying, the combined transform is the smooth magnification factor (constant
+    // overlay scale → zero per-frame bindings here); vector content (rects, CurveRenderer glyph
+    // and text) stays sharp at any zoom.
+    Item {
+        id: overlay
         z: 15
 
-        Behavior on color { ColorAnimation { duration: 100 } }
+        readonly property real dpr: delegateRoot.dockLayoutRef
+            ? Math.max(0.5, delegateRoot.dockLayoutRef.devicePixelRatio) : 1.0
+        readonly property int sidePx: Math.max(1, Math.round(delegateRoot.effectiveBaseSize * dpr))
+        readonly property real side: sidePx / dpr
+        readonly property real r: delegateRoot.restingScale
 
-        Kirigami.Icon {
-            anchors.centerIn: parent
-            width: Math.max(11, Math.round(parent.badgeSize * 0.68))
-            height: width
-            source: delegateRoot.isAudioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
-            isMask: true
-            color: "#ffffff"
+        // Integer physical-pixel count for a logical length, with a logical minimum.
+        function npx(v, minLogical) {
+            return Math.max(Math.max(1, Math.round(minLogical * dpr)), Math.round(v * dpr));
+        }
+        // Same, but with parity matched to `extentPx` so the span centres exactly on whole pixels.
+        function centredPx(v, minLogical, extentPx) {
+            const n = npx(v, minLogical);
+            return (((n - extentPx) % 2) + 2) % 2 === 0 ? n : n + 1;
+        }
+        function px(n) { return n / dpr; }
+
+        width: side
+        height: side
+        transformOrigin: Item.TopLeft
+        scale: 1.0 / r
+        // Pin to the engine's pixel-aligned corner: leading edge + screen-edge base.
+        x: delegateRoot.dockEdge === 3 ? delegateRoot.width - side / r : 0
+        y: delegateRoot.dockEdge === 0 ? delegateRoot.height - side / r : 0
+
+        // Glyph/text rendering: hinted native glyphs 1:1 at rest, resolution-independent curves when zoomed.
+        readonly property int textRenderType: delegateRoot.isMagnifying ? Text.CurveRendering : Text.NativeRendering
+
+        // SmartLauncher progress bar (bottom of icon)
+        Rectangle {
+            id: progressTrack
+            visible: delegateRoot.smartProgressVisible
+            readonly property int insetPx: overlay.npx(6 * overlay.r, 2)
+            readonly property int hPx: overlay.npx(4 * overlay.r, 2)
+            readonly property int bottomPx: overlay.npx(8 * overlay.r, 2)
+            x: overlay.px(insetPx)
+            y: overlay.px(overlay.sidePx - bottomPx - hPx)
+            width: overlay.px(Math.max(2, overlay.sidePx - 2 * insetPx))
+            height: overlay.px(hPx)
+            radius: height * 0.5
+            color: Qt.rgba(0, 0, 0, 0.55)
+
+            Rectangle {
+                width: overlay.px(Math.round(Math.max(0, Math.min(1, delegateRoot.smartProgress)) * progressTrack.width * overlay.dpr))
+                height: parent.height
+                radius: parent.radius
+                color: Kirigami.Theme.highlightColor
+            }
         }
 
-        MouseArea {
-            id: audioMouseArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: function(mouse) {
-                mouse.accepted = true;
-                if (delegateRoot.audioTrackerRef) {
-                    delegateRoot.audioTrackerRef.toggleMuteForTask(
-                        delegateRoot.appPid,
-                        delegateRoot.appName,
-                        delegateRoot.appId
-                    );
+        // Customizable Running / Active / Attention Indicator
+        // indicatorStyle: 0 = Pill Bar, 1 = Classic Dot, 2 = Glowing Underline, 3 = Minimal Line, 4 = None
+        // indicatorPosition: 0 = Screen Edge (Outer), 1 = Inside Icon
+        Item {
+            id: indicatorHolder
+            visible: delegateRoot.indicatorStyle !== 4
+                && (delegateRoot.isWindow || delegateRoot.isGroupParent || delegateRoot.isDemandingAttention)
+
+            readonly property real b: overlay.side
+            readonly property real r: overlay.r
+            // Lengths in resting logical px (legacy delegate-unit formulas × restingScale).
+            readonly property real primaryLen: {
+                switch (delegateRoot.indicatorStyle) {
+                case 1: return Math.max(6 * r, b * 0.10);
+                case 2: return delegateRoot.isActive ? Math.max(18 * r, b * 0.42) : Math.max(10 * r, b * 0.22);
+                case 3: return delegateRoot.isActive ? Math.max(14 * r, b * 0.30) : Math.max(8 * r, b * 0.16);
+                case 0:
+                default: return delegateRoot.isActive ? Math.max(12 * r, b * 0.24) : Math.max(6 * r, b * 0.11);
+                }
+            }
+            readonly property real crossLen: {
+                switch (delegateRoot.indicatorStyle) {
+                case 1: return primaryLen;
+                case 2: return Math.max(4 * r, b * 0.065);
+                case 3: return 2.5 * r;
+                case 0:
+                default: return Math.max(5 * r, b * 0.08);
+                }
+            }
+            readonly property int primaryPx: overlay.centredPx(primaryLen, 3, overlay.sidePx)
+            readonly property int crossPx: delegateRoot.indicatorStyle === 1
+                ? primaryPx
+                : overlay.npx(crossLen, delegateRoot.indicatorStyle === 3 ? 1 : 2)
+            readonly property int insetPx: delegateRoot.indicatorPosition === 1 ? overlay.npx(4 * r, 1) : 0
+            readonly property int glowPadPx: overlay.npx(3 * r, 1)
+            readonly property color indicatorColor: delegateRoot.isDemandingAttention
+                ? Kirigami.Theme.negativeTextColor
+                : (delegateRoot.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
+
+            readonly property int wPx: delegateRoot.isHorizontalDock ? primaryPx : crossPx
+            readonly property int hPx: delegateRoot.isHorizontalDock ? crossPx : primaryPx
+
+            width: overlay.px(wPx)
+            height: overlay.px(hPx)
+            x: overlay.px(delegateRoot.isHorizontalDock
+                ? (overlay.sidePx - wPx) / 2
+                : (delegateRoot.dockEdge === 2 ? insetPx : overlay.sidePx - wPx - insetPx))
+            y: overlay.px(!delegateRoot.isHorizontalDock
+                ? (overlay.sidePx - hPx) / 2
+                : (delegateRoot.dockEdge === 1 ? insetPx : overlay.sidePx - hPx - insetPx))
+
+            // Soft accent glow for Glowing Underline style
+            Rectangle {
+                visible: delegateRoot.indicatorStyle === 2
+                readonly property int padPx: indicatorHolder.glowPadPx
+                x: -overlay.px(padPx)
+                y: -overlay.px(Math.max(1, padPx - 1))
+                width: parent.width + 2 * overlay.px(padPx)
+                height: parent.height + 2 * overlay.px(Math.max(1, padPx - 1))
+                radius: Math.min(width, height) * 0.5
+                color: indicatorHolder.indicatorColor
+                opacity: delegateRoot.isActive ? 0.35 : 0.18
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: Math.min(width, height) * 0.5
+                color: indicatorHolder.indicatorColor
+                opacity: delegateRoot.isMinimized ? 0.45 : 0.95
+            }
+        }
+
+        // SmartLauncher unread count badge OR group count badge (top-right)
+        Rectangle {
+            id: countBadge
+            readonly property int sizePx: overlay.npx(Math.min(20, Math.max(11, overlay.side * 0.38)), 11)
+            readonly property int wPx: Math.max(sizePx, Math.ceil(countLabel.implicitWidth * overlay.dpr) + Math.round(sizePx * 0.5))
+            visible: delegateRoot.smartCountVisible || (delegateRoot.isGroupParent && delegateRoot.childCount > 1)
+            x: overlay.px(overlay.sidePx - wPx)
+            y: 0
+            width: overlay.px(wPx)
+            height: overlay.px(sizePx)
+            radius: height * 0.5
+            color: delegateRoot.smartCountVisible ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.highlightColor
+
+            Text {
+                id: countLabel
+                x: overlay.px(Math.round((countBadge.wPx - implicitWidth * overlay.dpr) / 2))
+                y: overlay.px(Math.round((countBadge.sizePx - implicitHeight * overlay.dpr) / 2))
+                text: delegateRoot.smartCountVisible
+                    ? (delegateRoot.smartCount > 99 ? "99+" : String(delegateRoot.smartCount))
+                    : String(delegateRoot.childCount)
+                color: "#ffffff"
+                font.pixelSize: Math.max(8, Math.round(countBadge.height * 0.68))
+                font.bold: true
+                renderType: overlay.textRenderType
+            }
+        }
+
+        // Shortcut index badge (shown smoothly while holding Meta when enabled in settings)
+        Rectangle {
+            id: indexBadge
+            readonly property int sizePx: overlay.npx(Math.min(22, Math.max(12, overlay.side * 0.42)), 12)
+            readonly property bool badgeActive: delegateRoot.showIndexBadge && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
+            visible: opacity > 0.01 && delegateRoot.taskIndex >= 0 && delegateRoot.taskIndex < 9
+            opacity: badgeActive ? 1.0 : 0.0
+            scale: badgeActive ? 1.0 : 0.82
+            x: 0
+            y: 0
+            width: overlay.px(sizePx)
+            height: overlay.px(sizePx)
+            radius: overlay.px(Math.max(2, Math.round(sizePx * 0.28)))
+            color: Qt.rgba(0, 0, 0, 0.72)
+            border.width: overlay.px(1)
+            border.color: Qt.rgba(1, 1, 1, 0.22)
+
+            Behavior on opacity { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+
+            Text {
+                x: overlay.px(Math.round((indexBadge.sizePx - implicitWidth * overlay.dpr) / 2))
+                y: overlay.px(Math.round((indexBadge.sizePx - implicitHeight * overlay.dpr) / 2))
+                text: String(delegateRoot.taskIndex + 1)
+                color: "#ffffff"
+                font.pixelSize: Math.max(8, Math.round(indexBadge.height * 0.62))
+                font.bold: true
+                renderType: overlay.textRenderType
+            }
+        }
+
+        // Clickable Audio / Mute Indicator Badge (top-right unless the count badge occupies it).
+        // The speaker glyph is drawn as vector paths with the CurveRenderer (analytic coverage AA in
+        // the fragment shader), so it is sharp at 1:1 and stays sharp under magnification, unlike a
+        // pre-rasterized 16 px symbolic icon resampled to ~8 px.
+        Rectangle {
+            id: audioBadge
+            readonly property int sizePx: overlay.npx(Math.min(20, Math.max(11, overlay.side * 0.40)), 11)
+            readonly property bool countBadgeVisible: countBadge.visible
+            visible: delegateRoot.hasAudioStream && !(delegateRoot.showIndexBadge && countBadgeVisible)
+            x: countBadgeVisible ? 0 : overlay.px(overlay.sidePx - sizePx)
+            y: 0
+            width: overlay.px(sizePx)
+            height: overlay.px(sizePx)
+            radius: height * 0.5
+            color: delegateRoot.isAudioMuted
+                ? Kirigami.Theme.negativeTextColor
+                : (audioMouseArea.containsMouse
+                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.90)
+                    : Qt.rgba(0, 0, 0, 0.55))
+
+            Behavior on color { ColorAnimation { duration: 100 } }
+
+            // 16×16 design grid (Breeze-style speaker), uniformly scaled into the badge.
+            Shape {
+                id: speakerGlyph
+                readonly property real glyphSize: audioBadge.width * 0.70
+                width: 16
+                height: 16
+                x: (audioBadge.width - glyphSize) * 0.5
+                y: (audioBadge.height - glyphSize) * 0.5
+                transformOrigin: Item.TopLeft
+                scale: glyphSize / 16
+                preferredRendererType: Shape.CurveRenderer
+
+                // Speaker body
+                ShapePath {
+                    strokeWidth: -1
+                    fillColor: "#ffffff"
+                    startX: 1.5; startY: 5.5
+                    PathLine { x: 4.5; y: 5.5 }
+                    PathLine { x: 8.5; y: 1.5 }
+                    PathLine { x: 8.5; y: 14.5 }
+                    PathLine { x: 4.5; y: 10.5 }
+                    PathLine { x: 1.5; y: 10.5 }
+                    PathLine { x: 1.5; y: 5.5 }
+                }
+                // Sound waves (playing)
+                ShapePath {
+                    strokeColor: delegateRoot.isAudioMuted ? "transparent" : "#ffffff"
+                    strokeWidth: 1.6
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    startX: 10.8; startY: 5.6
+                    PathArc { x: 10.8; y: 10.4; radiusX: 3.4; radiusY: 3.4 }
+                }
+                ShapePath {
+                    strokeColor: delegateRoot.isAudioMuted ? "transparent" : "#ffffff"
+                    strokeWidth: 1.6
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    startX: 12.6; startY: 3.2
+                    PathArc { x: 12.6; y: 12.8; radiusX: 6.2; radiusY: 6.2 }
+                }
+                // Mute cross
+                ShapePath {
+                    strokeColor: delegateRoot.isAudioMuted ? "#ffffff" : "transparent"
+                    strokeWidth: 1.6
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    startX: 10.5; startY: 5.5
+                    PathLine { x: 15; y: 10.5 }
+                    PathMove { x: 15; y: 5.5 }
+                    PathLine { x: 10.5; y: 10.5 }
+                }
+            }
+
+            MouseArea {
+                id: audioMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: function(mouse) {
+                    mouse.accepted = true;
+                    if (delegateRoot.audioTrackerRef) {
+                        delegateRoot.audioTrackerRef.toggleMuteForTask(
+                            delegateRoot.appPid,
+                            delegateRoot.appName,
+                            delegateRoot.appId
+                        );
+                    }
                 }
             }
         }
