@@ -163,7 +163,7 @@ QRegion BlurRegionController::panelBackgroundRegion() const {
     if (maskProperty.typeId() != QMetaType::QRegion) {
         return {};
     }
-    QRegion mask = maskProperty.value<QRegion>();
+    auto mask = maskProperty.value<QRegion>();
     const QPoint offset = m_panelRoot->property("floatingTranslucentItemOffset").toPoint();
     mask.translate(offset);
     return mask;
