@@ -62,6 +62,10 @@ Item {
     property bool dragOffToUnpin: true
     property int indicatorStyle: 0
     property int indicatorPosition: 0
+    // 0: Theme (accent when active), 1: Monochrome, 2: Accent
+    property int indicatorColorMode: 0
+    // Logical px of free space between the resting icon and the dock's outer edge
+    property real indicatorOutset: 0
     property int smartLauncherRevision: 0
 
     readonly property bool isHorizontalDock: dockEdge === 0 || dockEdge === 1
@@ -470,11 +474,25 @@ Item {
             readonly property int crossPx: delegateRoot.indicatorStyle === 1
                 ? primaryPx
                 : overlay.npx(crossLen, delegateRoot.indicatorStyle === 3 ? 1 : 2)
-            readonly property int insetPx: delegateRoot.indicatorPosition === 1 ? overlay.npx(4 * r, 1) : 0
+            // Outer position: centre the indicator in the gap between the icon and the dock's
+            // outer edge (pill padding or screen-edge padding) instead of overlapping the icon.
+            readonly property int marginPx: Math.round(delegateRoot.iconMargin * overlay.dpr)
+            readonly property int gapPx: Math.round(delegateRoot.indicatorOutset * overlay.dpr) + marginPx
+            readonly property int outsetPx: gapPx >= crossPx + marginPx + 2
+                ? Math.round(gapPx / 2 - marginPx + crossPx / 2)
+                : 0
+            readonly property int insetPx: delegateRoot.indicatorPosition === 1 ? overlay.npx(4 * r, 1) : -outsetPx
             readonly property int glowPadPx: overlay.npx(3 * r, 1)
-            readonly property color indicatorColor: delegateRoot.isDemandingAttention
-                ? Kirigami.Theme.negativeTextColor
-                : (delegateRoot.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
+            readonly property color indicatorColor: {
+                if (delegateRoot.isDemandingAttention) {
+                    return Kirigami.Theme.negativeTextColor;
+                }
+                switch (delegateRoot.indicatorColorMode) {
+                case 1: return Kirigami.Theme.textColor;
+                case 2: return Kirigami.Theme.highlightColor;
+                default: return delegateRoot.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor;
+                }
+            }
 
             readonly property int wPx: delegateRoot.isHorizontalDock ? primaryPx : crossPx
             readonly property int hPx: delegateRoot.isHorizontalDock ? crossPx : primaryPx

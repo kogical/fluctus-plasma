@@ -29,6 +29,56 @@ private Q_SLOTS:
         QVERIFY(bounds.bottom() <= 79);
     }
 
+    void testBlurCustomRegionOverridesRoundedPill() {
+        BlurRegionController controller;
+        controller.setWindowPillRect(QRectF(0.0, 0.0, 200.0, 50.0));
+        controller.setCornerRadius(12.0);
+        const QRegion rounded = controller.currentRegion();
+        QVERIFY(!rounded.isEmpty());
+        QCOMPARE(rounded, BlurRegionController::buildRoundedRegion(QRectF(0.0, 0.0, 200.0, 50.0), 12.0));
+
+        // A FrameSvg-style mask replaces the rounded rect verbatim...
+        const QRegion mask(QRect(5, 5, 40, 20));
+        controller.setCustomRegion(mask);
+        QCOMPARE(controller.currentRegion(), mask);
+
+        // ...and clearing it falls back to the rounded pill.
+        controller.setCustomRegion({});
+        QCOMPARE(controller.currentRegion(), rounded);
+
+        // Empty pill without a mask yields no blur region.
+        controller.setWindowPillRect({});
+        QVERIFY(controller.currentRegion().isEmpty());
+    }
+
+    void testBlurReapplyIsCoalescedAndSafeWithoutWindow() {
+        BlurRegionController controller;
+        controller.setWindowPillRect(QRectF(0.0, 0.0, 200.0, 50.0));
+        // Many updates in one pass must not crash or apply synchronously without a window.
+        for (int i = 0; i < 50; ++i) {
+            controller.setWindowPillRect(QRectF(0.0, 0.0, 200.0 + i, 50.0));
+            controller.setContrast(BlurContrast{true, 1.0 + i * 0.01, 1.0, 1.5});
+        }
+        controller.applyNow();
+        QCoreApplication::processEvents();
+        QVERIFY(!controller.currentRegion().isEmpty());
+    }
+
+    void testDockLayoutBlurMaskAcceptsRegionAndClearsOnUndefined() {
+        DockLayoutItem item;
+        QVERIFY(item.blurMask().value<QRegion>().isEmpty());
+        item.setBlurMask(QVariant::fromValue(QRegion(QRect(0, 0, 10, 10))));
+        QCOMPARE(item.blurMask().value<QRegion>(), QRegion(QRect(0, 0, 10, 10)));
+        item.setBlurMask(QVariant());
+        QVERIFY(item.blurMask().value<QRegion>().isEmpty());
+
+        // Contrast setters round-trip.
+        item.setBlurSaturation(1.8);
+        QCOMPARE(item.blurSaturation(), 1.8);
+        item.setBlurContrast(1.1);
+        QCOMPARE(item.blurContrast(), 1.1);
+    }
+
     void testDelegateLifecycleAndScaleOnlyUpdates() {
         QQmlEngine engine;
         QQmlComponent delegateComp(&engine);

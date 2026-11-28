@@ -47,7 +47,12 @@ class DockLayoutItem : public QQuickItem {
     Q_PROPERTY(qreal iconSpacingRatio READ iconSpacingRatio WRITE setIconSpacingRatio NOTIFY configChanged)
     Q_PROPERTY(bool clampToContainer READ clampToContainer WRITE setClampToContainer NOTIFY configChanged)
     Q_PROPERTY(bool blurEnabled READ blurEnabled WRITE setBlurEnabled NOTIFY blurConfigChanged)
-    Q_PROPERTY(int blurStyle READ blurStyle WRITE setBlurStyle NOTIFY blurConfigChanged)
+    /// KWin background-contrast parameters applied with the blur (all 1.0 disables contrast).
+    Q_PROPERTY(qreal blurContrast READ blurContrast WRITE setBlurContrast NOTIFY blurConfigChanged)
+    Q_PROPERTY(qreal blurIntensity READ blurIntensity WRITE setBlurIntensity NOTIFY blurConfigChanged)
+    Q_PROPERTY(qreal blurSaturation READ blurSaturation WRITE setBlurSaturation NOTIFY blurConfigChanged)
+    /// Optional explicit blur shape relative to pillRect's top-left (e.g. FrameSvgItem.mask).
+    Q_PROPERTY(QVariant blurMask READ blurMask WRITE setBlurMask NOTIFY blurConfigChanged)
     Q_PROPERTY(qreal pillCornerRadius READ pillCornerRadius WRITE setPillCornerRadius NOTIFY blurConfigChanged)
     Q_PROPERTY(qreal edgePadding READ edgePadding WRITE setEdgePadding NOTIFY configChanged)
     Q_PROPERTY(qreal pillPaddingPrimary READ pillPaddingPrimary WRITE setPillPaddingPrimary NOTIFY configChanged)
@@ -124,8 +129,15 @@ public:
     [[nodiscard]] bool blurEnabled() const noexcept { return m_blurEnabled; }
     void setBlurEnabled(bool enabled);
 
-    [[nodiscard]] int blurStyle() const noexcept { return m_blurStyle; }
-    void setBlurStyle(int style);
+    [[nodiscard]] qreal blurContrast() const noexcept { return m_blurContrast.contrast; }
+    void setBlurContrast(qreal value);
+    [[nodiscard]] qreal blurIntensity() const noexcept { return m_blurContrast.intensity; }
+    void setBlurIntensity(qreal value);
+    [[nodiscard]] qreal blurSaturation() const noexcept { return m_blurContrast.saturation; }
+    void setBlurSaturation(qreal value);
+    [[nodiscard]] QVariant blurMask() const { return QVariant::fromValue(m_blurMask); }
+    /// Accepts a QRegion; anything else (undefined/null) clears the custom mask.
+    void setBlurMask(const QVariant &mask);
 
     [[nodiscard]] qreal pillCornerRadius() const noexcept { return m_pillCornerRadius; }
     void setPillCornerRadius(qreal radius);
@@ -231,6 +243,7 @@ private:
     void updateAttentionState();
     void refreshDevicePixelRatio();
     void updateBlurRegion();
+    void pushBlurContrast();
     [[nodiscard]] bool hasTaskModelRoles() const;
     [[nodiscard]] TaskIdentity readTaskIdentity(int row) const;
     [[nodiscard]] static bool matchesTaskIdentity(const TaskIdentity &a, const TaskIdentity &b) noexcept;
@@ -252,7 +265,8 @@ private:
     QRectF m_pillRect;
     qreal m_hoverAlpha{0.0};
     bool m_blurEnabled{true};
-    int m_blurStyle{0};
+    BlurContrast m_blurContrast;
+    QRegion m_blurMask;
     qreal m_pillCornerRadius{16.0};
     bool m_hasAttentionTask{false};
     bool m_suppressNextLayoutReorder{false};

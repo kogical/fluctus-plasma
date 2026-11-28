@@ -348,13 +348,46 @@ void DockLayoutItem::setBlurEnabled(bool enabled) {
     Q_EMIT blurConfigChanged();
 }
 
-void DockLayoutItem::setBlurStyle(int style) {
-    const int clamped = std::clamp(style, 0, 4);
-    if (m_blurStyle == clamped) {
+void DockLayoutItem::setBlurContrast(qreal value) {
+    if (qFuzzyCompare(m_blurContrast.contrast, value)) {
         return;
     }
-    m_blurStyle = clamped;
-    m_blurController->setBlurStyle(clamped);
+    m_blurContrast.contrast = value;
+    pushBlurContrast();
+}
+
+void DockLayoutItem::setBlurIntensity(qreal value) {
+    if (qFuzzyCompare(m_blurContrast.intensity, value)) {
+        return;
+    }
+    m_blurContrast.intensity = value;
+    pushBlurContrast();
+}
+
+void DockLayoutItem::setBlurSaturation(qreal value) {
+    if (qFuzzyCompare(m_blurContrast.saturation, value)) {
+        return;
+    }
+    m_blurContrast.saturation = value;
+    pushBlurContrast();
+}
+
+void DockLayoutItem::pushBlurContrast() {
+    BlurContrast contrast = m_blurContrast;
+    contrast.enabled = !qFuzzyCompare(contrast.contrast, 1.0)
+        || !qFuzzyCompare(contrast.intensity, 1.0)
+        || !qFuzzyCompare(contrast.saturation, 1.0);
+    m_blurController->setContrast(contrast);
+    Q_EMIT blurConfigChanged();
+}
+
+void DockLayoutItem::setBlurMask(const QVariant &value) {
+    const QRegion mask = value.typeId() == QMetaType::QRegion ? value.value<QRegion>() : QRegion();
+    if (m_blurMask == mask) {
+        return;
+    }
+    m_blurMask = mask;
+    updateBlurRegion();
     Q_EMIT blurConfigChanged();
 }
 
@@ -1338,11 +1371,15 @@ void DockLayoutItem::refreshDevicePixelRatio() {
 void DockLayoutItem::updateBlurRegion() {
     if (!window() || m_pillRect.isEmpty()) {
         m_blurController->setWindowPillRect({});
+        m_blurController->setCustomRegion({});
         return;
     }
     const QPointF topLeftInWindow = mapToScene(m_pillRect.topLeft());
     const QRectF rectInWindow(topLeftInWindow, m_pillRect.size());
     m_blurController->setWindowPillRect(rectInWindow);
+    m_blurController->setCustomRegion(
+        m_blurMask.isEmpty() ? QRegion() : m_blurMask.translated(topLeftInWindow.toPoint())
+    );
 }
 
 QQuickItem::TransformOrigin DockLayoutItem::transformOriginForEdge() const noexcept {

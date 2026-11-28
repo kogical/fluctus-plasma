@@ -13,11 +13,25 @@
         <entry name="iconSpacingRatio" type="Double">
             <default>0.15</default>
         </entry>
+        <!-- Resting icon size the panel-height calculator aims for (logical px) -->
+        <entry name="targetIconSize" type="Int">
+            <default>40</default>
+        </entry>
         <entry name="edgePadding" type="Int">
             <default>6</default>
         </entry>
         <entry name="topMargin" type="Int">
             <default>6</default>
+        </entry>
+
+        <!-- Plasma panel integration -->
+        <!-- Hide the hosting Plasma panel's own background (frame, blur, contrast, shadow) -->
+        <entry name="hidePanelBackground" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- Id of the last applied preset (informational, used to highlight the preset card) -->
+        <entry name="activePreset" type="String">
+            <default></default>
         </entry>
 
         <!-- Background & Pill Surface -->
@@ -32,7 +46,7 @@
         <entry name="blurEnabled" type="Bool">
             <default>true</default>
         </entry>
-        <!-- 0: Plasma Theme Color, 1: Custom Color -->
+        <!-- 0: Plasma Theme Color, 1: Custom Color, 2: Accent Color -->
         <entry name="pillColorMode" type="Int">
             <default>0</default>
         </entry>
@@ -43,7 +57,26 @@
             <default>18</default>
         </entry>
         <entry name="pillOpacity" type="Double">
-            <default>0.62</default>
+            <default>0.22</default>
+        </entry>
+        <!-- 0: Material default, 1: Single line, 2: Dual hairline, 3: Accent glow, 4: None -->
+        <entry name="pillBorderStyle" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="pillShadow" type="Bool">
+            <default>true</default>
+        </entry>
+        <!-- Shadow strength multiplier (0..2) -->
+        <entry name="pillShadowStrength" type="Double">
+            <default>1.0</default>
+        </entry>
+        <!-- Glass reacts to the pointer: the light swings towards it and a soft spot follows it -->
+        <entry name="glassInteractive" type="Bool">
+            <default>true</default>
+        </entry>
+        <!-- Glass rim highlight strength multiplier (0..2) -->
+        <entry name="glassHighlight" type="Double">
+            <default>1.0</default>
         </entry>
         <entry name="pillBorderWidth" type="Int">
             <default>1</default>
@@ -62,6 +95,10 @@
         </entry>
         <!-- 0: Pill Bar, 1: Classic Dot, 2: Glowing Underline, 3: Minimal Line, 4: None -->
         <entry name="indicatorStyle" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- 0: Theme (accent when active), 1: Monochrome, 2: Accent -->
+        <entry name="indicatorColorMode" type="Int">
             <default>0</default>
         </entry>
         <!-- 0: Screen Edge, 1: Inside Icon -->
