@@ -11,5 +11,5 @@ Checks: >
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-non-private-member-variables-in-classes
 WarningsAsErrors: ''
-HeaderFilterRegex: '^src/.*'
+HeaderFilterRegex: '^(dock/src|libs/glassclient)/.*'
 FormatStyle: none

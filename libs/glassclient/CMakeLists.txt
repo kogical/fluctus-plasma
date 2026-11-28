@@ -54,6 +54,7 @@ if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
         Qt6::Quick
     )
     set_target_properties(fluctus_glass_qml PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    fluctus_allow_sanitizer_undefs(fluctus_glass_qml)
     # KDECMakeSettings drops the "lib" prefix from modules, but the QML engine looks for
     # lib<plugin>.so as named in qmldir.
     set_target_properties(fluctus_glass_qmlplugin PROPERTIES PREFIX "lib")
