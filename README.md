@@ -114,4 +114,4 @@ For architecture notes, dock physics math, and Plasma 6 Wayland engineering deta
 
 ## License
 
-Fluctus Dock is licensed under the [MIT License](LICENSE).
+Fluctus Dock is licensed under the [Apache License 2.0](LICENSE).

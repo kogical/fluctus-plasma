@@ -1,0 +1,48 @@
+[package]
+name = "liquidglass"
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Framework-agnostic, zero-copy Apple-accurate Liquid Glass GPU rendering engine"
+repository = "https://github.com/kogical/fluctus-plasma"
+build = "build.rs"
+
+[lib]
+name = "liquidglass"
+crate-type = ["rlib", "staticlib"]
+
+[features]
+default = ["core"]
+# Zero-GPU-dep core: #[repr(C)] descriptors, SDF/bezel/Kawase math, bounds, pointer physics, uniform packing.
+core = []
+# Cross-platform GPU renderer (Vulkan / Metal / DX12 / GLES / WebGPU) + CPU buffer helper.
+wgpu = ["core", "dep:wgpu", "dep:pollster"]
+# Zero-copy OpenGL / OpenGL ES backend borrowing host GL context, textures, and target FBO.
+gl = ["core", "dep:glow"]
+# Allocation-free C ABI + cbindgen-generated include/liquidglass.h.
+ffi = ["core"]
+
+[dependencies]
+bytemuck = { version = "1.25", features = ["derive"] }
+glow = { version = "0.18", optional = true }
+pollster = { version = "1.0", optional = true }
+wgpu = { version = "30.0", optional = true }
+
+[build-dependencies]
+cbindgen = "0.29"
+naga = { version = "30.0", features = [
+    "wgsl-in",
+    "wgsl-out",
+    "spv-out",
+    "glsl-out",
+    "msl-out",
+    "hlsl-out",
+] }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

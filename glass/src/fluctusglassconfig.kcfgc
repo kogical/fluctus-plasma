@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: GPL-3.0-or-later
+File=fluctusglass.kcfg
+ClassName=FluctusGlassConfig
+NameSpace=fluctus::glass
+Singleton=true
+Mutators=true

@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kogical"
+            }
+        ],
+        "Category": "Windows and Tasks",
+        "Description": "macOS-style animated task manager dock built in modern C++23 for Plasma 6.8+",
+        "Icon": "preferences-system-windows",
+        "Id": "com.kogical.fluctus.dock",
+        "License": "Apache-2.0",
+        "Name": "Fluctus Dock"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.multitasking"
+    ]
+}

@@ -1,4 +1,7 @@
 build/
+target/
+__pycache__/
+*.pyc
 .cache/
 compile_commands.json
 *.user

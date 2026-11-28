@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/effects/fluctusglass/">
+  <file alias="shaders/vertex.vert">@GLASS_SRC@/shaders/vertex.vert</file>
+  <file alias="shaders/downsample.frag">@GLASS_SRC@/shaders/downsample.frag</file>
+  <file alias="shaders/upsample.frag">@GLASS_SRC@/shaders/upsample.frag</file>
+  <file alias="shaders/plain.frag">@GLASS_SRC@/shaders/plain.frag</file>
+</qresource>
+</RCC>
