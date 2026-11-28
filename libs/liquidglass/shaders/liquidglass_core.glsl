@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Kogical
 // SPDX-License-Identifier: Apache-2.0
 //
-// Liquid Glass shading core shared by the Kogical.LiquidGlass Qt Quick module (via qsb) and the
-// Fluctus Glass KWin effect (via KWin's GLSL preprocessor). One source of truth for the look.
+// Liquid Glass shading core of the Kogical.LiquidGlass Qt Quick module (inlined before qsb runs).
+// The Fluctus Glass KWin effect renders with the Rust engine in crates/liquidglass instead
+// (shaders/liquidglass.wgsl); keep the two looks in step when changing either.
 //
-// Written in the GLSL subset both hosts accept (GLSL 4.40 for qsb, GLSL ES 3.00 / 1.00 for KWin):
+// Written in a portable GLSL subset (GLSL 4.40 for qsb, also valid GLSL ES 3.00):
 // no #version, no uniforms, no layout qualifiers. Hosts fill LGParams from their own uniforms.
 //
 // Coordinate convention: `p` and every length are in one consistent pixel space (logical px in

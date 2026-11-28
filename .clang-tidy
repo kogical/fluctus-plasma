@@ -11,5 +11,6 @@ Checks: >
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-non-private-member-variables-in-classes
 WarningsAsErrors: ''
-HeaderFilterRegex: '^(dock/src|libs/glassclient)/.*'
+# clang-tidy matches this against absolute paths.
+HeaderFilterRegex: '.*/(dock/src|libs/glassclient|glass/(src|kcm))/.*'
 FormatStyle: none

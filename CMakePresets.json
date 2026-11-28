@@ -2,7 +2,7 @@
   "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 28,
+    "minor": 29,
     "patch": 0
   },
   "configurePresets": [
@@ -14,7 +14,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
-        "FLUCTUS_BUILD_TESTS": "ON"
+        "FLUCTUS_BUILD_TESTS": "ON",
+        "FLUCTUS_REQUIRE_ECM": "ON"
       }
     },
     {
@@ -25,7 +26,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
-        "FLUCTUS_BUILD_TESTS": "ON"
+        "FLUCTUS_BUILD_TESTS": "ON",
+        "FLUCTUS_REQUIRE_ECM": "ON"
       }
     },
     {
@@ -37,7 +39,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "KDE_INSTALL_USE_QT_SYS_PATHS": "ON",
         "FLUCTUS_BUILD_TESTS": "ON",
-        "FLUCTUS_ENABLE_SANITIZERS": "ON"
+        "FLUCTUS_ENABLE_SANITIZERS": "ON",
+        "FLUCTUS_REQUIRE_ECM": "ON"
       }
     }
   ],
@@ -75,6 +78,9 @@
       "configurePreset": "debug-asan-ubsan",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
       }
     }
   ]

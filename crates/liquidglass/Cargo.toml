@@ -1,10 +1,12 @@
 [package]
 name = "liquidglass"
-version = "0.2.0"
-edition = "2024"
-license = "Apache-2.0"
 description = "Framework-agnostic, zero-copy Apple-accurate Liquid Glass GPU rendering engine"
-repository = "https://github.com/kogical/fluctus-plasma"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 build = "build.rs"
 
 [lib]
@@ -42,7 +44,3 @@ naga = { version = "30.0", features = [
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
-[profile.release]
-lto = "thin"
-codegen-units = 1
-panic = "abort"

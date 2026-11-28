@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0
+#
+# Fluctus Dock. Run `just` here, or `just dock <recipe>` from the repository root.
+
+import '../tools/common.just'
+
+applet := "com.kogical.fluctus.dock"
+# Applet id used before the monorepo split. `update` removes its files and moves panels over.
+legacy_applet := "com.kogical.fluctus"
+legacy_manifest := env("XDG_STATE_HOME", home_directory() / ".local/state") / "fluctus-plasma/install_manifest.txt"
+appletsrc := env("XDG_CONFIG_HOME", home_directory() / ".config") / "plasma-org.kde.plasma.desktop-appletsrc"
+
+# List the dock recipes
+[private]
+default:
+    @just --list
+
+# Build the dock applet
+build: (compile preset applet)
+
+# Build and run the dock's unit tests
+test: (compile preset "test_dock_physics" "test_dock_layout_item") (ctest preset "dock")
+
+# Same tests under AddressSanitizer + UndefinedBehaviorSanitizer
+test-san: (compile san_preset "test_dock_physics" "test_dock_layout_item") (ctest san_preset "dock")
+
+# Install the dock (asks for sudo when the prefix is not writable)
+install: build (install-component "dock")
+
+# Remove the installed dock
+uninstall: (uninstall-component "dock") (remove-manifest legacy_manifest)
+
+# Reinstall, move panels off the legacy applet id, and restart plasmashell (restart=ask|yes|no)
+update restart="ask": install (remove-manifest legacy_manifest)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rmdir "$(dirname "{{ legacy_manifest }}")" 2>/dev/null || true
+
+    migrate=false
+    if [ -f "{{ appletsrc }}" ] && grep -qx 'plugin={{ legacy_applet }}' "{{ appletsrc }}"; then
+        migrate=true
+    fi
+    migrate_panels() {
+        cp "{{ appletsrc }}" "{{ appletsrc }}.fluctus-backup"
+        sed -i 's/^plugin={{ replace(legacy_applet, ".", "\\.") }}$/plugin={{ applet }}/' "{{ appletsrc }}"
+        echo "Moved your docks to {{ applet }} (backup: {{ appletsrc }}.fluctus-backup)."
+    }
+
+    case "{{ restart }}" in
+        yes) restart=true ;;
+        no) restart=false ;;
+        ask) read -r -p "Restart plasmashell now? [y/N] " reply
+             [[ "$reply" =~ ^[Yy]$ ]] && restart=true || restart=false ;;
+        *) echo "restart must be ask, yes or no (got '{{ restart }}')" >&2; exit 1 ;;
+    esac
+
+    if ! pgrep -u "$(id -u)" -x plasmashell >/dev/null; then
+        # Nothing running that could overwrite the config: migrate right away.
+        if $migrate; then migrate_panels; fi
+        exit 0
+    fi
+    if ! $restart; then
+        if $migrate; then
+            echo "Your panels still use the old applet id. Run 'just dock update restart=yes' to move them." >&2
+        fi
+        exit 0
+    fi
+
+    # plasmashell rewrites its config on exit, so edit it only while plasmashell is stopped.
+    systemd=false
+    systemctl --user is-active --quiet plasma-plasmashell.service 2>/dev/null && systemd=true
+    if $systemd; then systemctl --user stop plasma-plasmashell.service; else kquitapp6 plasmashell || true; fi
+    for _ in $(seq 50); do pgrep -u "$(id -u)" -x plasmashell >/dev/null || break; sleep 0.2; done
+    if $migrate; then migrate_panels; fi
+    if $systemd; then systemctl --user start plasma-plasmashell.service; else kstart plasmashell >/dev/null 2>&1 & fi
+    echo "Restarted plasmashell."
+
+# Open the installed dock in its own window, outside any panel
+preview:
+    plasmawindowed {{ applet }}

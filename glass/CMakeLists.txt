@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Kogical
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Fluctus Glass: thin KWin compositor effect adapter (GPL-3.0-or-later, see glass/LICENSE)
+# Fluctus Glass: thin KWin compositor effect adapter (GPL-3.0-or-later, see LICENSE in this directory)
 # delegating all Liquid Glass rendering to the standalone Apache-2.0 Rust `liquidglass` engine.
 # Built against KWin's private development headers: rebuild after every KWin upgrade.
 
@@ -30,12 +30,16 @@ message(STATUS "Fluctus Glass: building against KWin ${KWin_VERSION}")
 set(FLUCTUS_GLASS_KWIN_VERSION "${KWin_VERSION}" CACHE INTERNAL "KWin version Fluctus Glass is built against")
 
 # Build the standalone Rust rendering engine as a minimal staticlib (gl + ffi only, zero wgpu bloat).
-set(LG_CRATE_DIR "${CMAKE_SOURCE_DIR}/crates/liquidglass")
-set(LG_RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust-target")
-set(LG_RUST_LIB "${LG_RUST_TARGET_DIR}/release/libliquidglass.a")
+# It lands in the Cargo workspace's shared target/ directory, so every CMake preset, `cargo test`
+# and CI reuse one compiled copy. Packagers can point FLUCTUS_CARGO_TARGET_DIR elsewhere.
+set(FLUCTUS_CARGO_TARGET_DIR "${PROJECT_SOURCE_DIR}/target" CACHE PATH "Cargo target directory for Rust crates")
+set(LG_CRATE_DIR "${PROJECT_SOURCE_DIR}/crates/liquidglass")
+set(LG_RUST_LIB "${FLUCTUS_CARGO_TARGET_DIR}/release/libliquidglass.a")
 set(LG_RUST_HEADER "${LG_CRATE_DIR}/include/liquidglass.h")
 
 file(GLOB LG_RUST_SOURCES CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/Cargo.toml"
+    "${PROJECT_SOURCE_DIR}/Cargo.lock"
     "${LG_CRATE_DIR}/Cargo.toml"
     "${LG_CRATE_DIR}/build.rs"
     "${LG_CRATE_DIR}/cbindgen.toml"
@@ -48,9 +52,10 @@ add_custom_command(
     COMMAND "${CARGO_EXECUTABLE}" build
         --manifest-path "${LG_CRATE_DIR}/Cargo.toml"
         --release
+        --locked
         --no-default-features
         --features "gl,ffi"
-        --target-dir "${LG_RUST_TARGET_DIR}"
+        --target-dir "${FLUCTUS_CARGO_TARGET_DIR}"
     DEPENDS ${LG_RUST_SOURCES}
     COMMENT "Building Rust liquidglass staticlib (gl,ffi) + liquidglass.h"
     VERBATIM
@@ -94,6 +99,8 @@ kconfig_add_kcfg_files(fluctusglass_SOURCES src/fluctusglassconfig.kcfgc)
 
 add_library(fluctusglass MODULE ${fluctusglass_SOURCES})
 set_target_properties(fluctusglass PROPERTIES AUTOMOC ON AUTORCC ON)
+# The KWin factory macro expands to K_PLUGIN_FACTORY, which AUTOMOC cannot see through.
+set_property(TARGET fluctusglass APPEND PROPERTY AUTOMOC_MACRO_NAMES KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 target_include_directories(fluctusglass PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(fluctusglass PRIVATE
     fluctus_glass_logic

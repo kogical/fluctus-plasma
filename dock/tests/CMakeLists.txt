@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0
+
 add_executable(test_dock_physics
     test_dock_physics.cpp
 )
@@ -24,3 +27,4 @@ add_test(NAME DockLayoutItemTests COMMAND test_dock_layout_item)
 set_tests_properties(DockLayoutItemTests PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+set_tests_properties(DockPhysicsTests DockLayoutItemTests PROPERTIES LABELS dock)

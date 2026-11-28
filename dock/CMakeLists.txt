@@ -79,6 +79,7 @@ set(FLUCTUS_QML_SOURCES
     package/contents/ui/TaskContextMenu.qml
     package/contents/ui/ToolTipDelegate.qml
     package/contents/ui/GroupDialog.qml
+    package/contents/ui/TaskGroupWindows.qml
     package/contents/ui/ConfigAppearance.qml
     package/contents/ui/ConfigPhysics.qml
     package/contents/ui/ConfigBehavior.qml

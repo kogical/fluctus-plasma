@@ -198,6 +198,7 @@ Item {
         mainItem: ToolTipDelegate {
             tasksModelRef: delegateRoot.tasksModelRef
             modelIndex: delegateRoot.modelIndex
+            taskIndex: delegateRoot.taskIndex
             displayTitle: delegateRoot.displayTitle
             appName: delegateRoot.appName
             decorationIcon: delegateRoot.decorationIcon

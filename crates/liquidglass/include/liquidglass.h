@@ -349,11 +349,17 @@ struct LgMaterial lg_material_crystal(void);
 
 /**
  * Returns the logical pixel sampling margin required around a shape for refraction & dispersion.
+ *
+ * # Safety
+ * `material` must be null or point to a valid, initialized `LgMaterial`.
  */
 float lg_material_sample_margin(const struct LgMaterial *material);
 
 /**
  * Returns the logical pixel draw margin required around a shape for shadow & outer borders.
+ *
+ * # Safety
+ * `material` must be null or point to a valid, initialized `LgMaterial`.
  */
 float lg_material_draw_margin(const struct LgMaterial *material);
 

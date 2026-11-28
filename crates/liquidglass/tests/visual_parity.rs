@@ -6,11 +6,24 @@
 
 #![cfg(feature = "wgpu")]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::{ImageBuffer, Rgba};
 use liquidglass::wgpu_backend::WgpuRenderer;
 use liquidglass::{sd_round_rect, LgMaterial, LgPointerState, LgRect, LgShape};
+
+/// Apple reference images are not redistributable: they live in $FLUCTUS_PARITY_REFS
+/// (default ~/.cache/fluctus/parity-refs) and the parity test skips itself without them.
+fn parity_refs_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("FLUCTUS_PARITY_REFS") {
+        return PathBuf::from(dir);
+    }
+    let cache = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .unwrap_or_default();
+    cache.join("fluctus/parity-refs")
+}
 
 fn luma(px: &[u8]) -> f32 {
     0.2126 * px[0] as f32 + 0.7152 * px[1] as f32 + 0.0722 * px[2] as f32
@@ -132,25 +145,20 @@ fn headless_wgpu_synthetic_optics_invariants() {
 
 #[test]
 fn headless_wgpu_apple_tahoe_parity() {
-    let ref_path = Path::new(
-        "/home/natix/.t3/userdata/attachments/\
-         0c96d757-1b36-4c10-ad28-bbe2f7f357b8-e42b4528-b8ab-40af-8619-05fb7e33f998.png",
-    );
-    let gt_path = Path::new(
-        "/tmp/claude-1000/-home-natix-Develop-github-fluctus-plasma/\
-         320ef985-2daf-4089-8e09-fa9ed3688e83/scratchpad/analysis/gt_wallpaper.png",
-    );
+    let refs = parity_refs_dir();
+    let ref_path = refs.join("music-card.png");
+    let gt_path = refs.join("music-card-wallpaper.png");
     if !ref_path.exists() || !gt_path.exists() {
         eprintln!("Skipping Apple Tahoe parity test (reference images not cached on this host)");
         return;
     }
 
     let (w, h) = (1067u32, 800u32);
-    let gt_img = image::open(gt_path)
+    let gt_img = image::open(&gt_path)
         .unwrap()
         .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
         .to_rgba8();
-    let ref_img = image::open(ref_path)
+    let ref_img = image::open(&ref_path)
         .unwrap()
         .resize_exact(w, h, image::imageops::FilterType::Lanczos3)
         .to_rgba8();
@@ -222,11 +230,8 @@ fn headless_wgpu_apple_tahoe_parity() {
     let ssim_all = ssim_masked(&out, ref_raw, &clean_mask);
 
     // Save side-by-side PNG for instant visual inspection.
-    let out_dir = Path::new(
-        "/tmp/claude-1000/-home-natix-Develop-github-fluctus-plasma/\
-         320ef985-2daf-4089-8e09-fa9ed3688e83/scratchpad/rust_wgpu_parity",
-    );
-    let _ = std::fs::create_dir_all(out_dir);
+    let out_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("wgpu-parity");
+    let _ = std::fs::create_dir_all(&out_dir);
     let mut sbs = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(w * 2, h);
     for y in 0..h {
         for x in 0..w {

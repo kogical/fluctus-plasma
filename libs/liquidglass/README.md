@@ -1,9 +1,14 @@
 # Kogical.LiquidGlass
 
 A reusable Qt Quick (Qt 6.8+) glass material: one QML item plus one fragment shader.
-No Plasma or KDE dependencies — drop the folder into any CMake/Qt Quick project.
+No Plasma or KDE dependencies, so you can drop the folder into any CMake/Qt Quick project.
+Fluctus Dock uses it to draw its backgrounds.
 
-![materials](../../docs/liquidglass-demo.png)
+Use this when your app draws glass *itself*. To have the compositor refract other windows
+behind yours, ask [Fluctus Glass](../../glass/README.md) through the
+[glass client](../glassclient/README.md) instead.
+
+![The materials side by side](docs/demo.png)
 
 ## Features
 
@@ -65,3 +70,5 @@ cmake -S . -B build -G Ninja && cmake --build build
 | `edgeShade`, `grain` | Refraction darkening band, film grain |
 | `innerBorderColor`, `outerBorderColor`, `borderWidth` | Dual hairline |
 | `shadowColor`, `shadowBlur`, `shadowOffsetX/Y` | Outside-only drop shadow |
+
+Licensed under [Apache-2.0](../../LICENSE).

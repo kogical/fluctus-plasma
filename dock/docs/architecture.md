@@ -1,4 +1,4 @@
-# Fluctus Plasma — Target Architecture & Engineering Standards
+# Fluctus Dock — Architecture & Engineering Standards
 
 ## 1. Core Architectural Principle: Compiled `Plasma::Applet` + C++-Owned Layout & Physics
 
@@ -95,15 +95,16 @@ enum class DockEdge : std::uint8_t { Bottom, Top, Left, Right };
 
 ---
 
-## 4. Planned Repository Layout
+## 4. Source Layout
+
+Paths are relative to `dock/`. The build is driven by the repository-wide CMake project, which
+also provides the shared libraries the dock links (`libs/glassclient`, `libs/liquidglass`).
 
 ```text
-fluctus-plasma/
-├── CMakeLists.txt                   # plasma_add_applet + fluctus_core + CTest
-├── CMakePresets.json                # release, debug, debug-asan-ubsan
-├── .clang-tidy
-├── justfile                         # build, test, test-san, install, uninstall, update, clean
-├── docs/                            # Stage 1 research & architecture docs
+dock/
+├── CMakeLists.txt                   # fluctus_core, fluctus_quick, plasma_add_applet
+├── justfile                         # build, test, test-san, install, uninstall, update, preview
+├── docs/                            # this documentation
 ├── src/
 │   ├── core/                        # Pure C++23 static lib (fluctus_core, zero QtQuick dep)
 │   │   ├── AxisGeometry.hpp
@@ -111,11 +112,11 @@ fluctus-plasma/
 │   │   ├── DampedSpring.hpp
 │   │   ├── BouncePhysics.hpp
 │   │   └── DockPhysicsEngine.{hpp,cpp}
-│   ├── quick/                       # DockLayoutItem, DockAnimationDriver, BlurRegionController
-│   └── backend/                     # FluctusApplet, TaskBackend, SmartLauncher*, ShortcutManager
-├── tests/                           # QtTest / CTest suite for fluctus_core
+│   ├── quick/                       # DockLayoutItem, DockAnimationDriver, BlurRegionController, DockIconItem
+│   └── backend/                     # FluctusApplet, TaskBackend, SmartLauncherBackend, ShortcutManager
+├── tests/                           # QtTest / CTest suite (label: dock)
 ├── package/
-│   ├── metadata.json                # Id: com.kogical.fluctus-plasma, Provides: org.kde.plasma.multitasking
+│   ├── metadata.json                # Id: com.kogical.fluctus.dock, Provides: org.kde.plasma.multitasking
 │   └── contents/
 │       ├── config/{config.qml,main.xml}
 │       └── ui/                      # Thin QML shell (main.qml, TaskDelegate.qml, tooltips, menus, configs)
@@ -144,13 +145,15 @@ fluctus-plasma/
 
 ## 6. `justfile` Command Design
 
-Configurable variables: `prefix := "/usr"`, `build_dir := "build"`, `state_dir := "${XDG_STATE_HOME:-$HOME/.local/state}/fluctus-plasma"`, `restart := "ask"` (`ask|yes|no`).
+The dock's recipes live in `dock/justfile` and are also reachable from the root as `just dock <recipe>`.
+The shared machinery (one CMake tree per preset, install manifests, sudo only when the prefix is not
+writable) is described in [the development guide](../../docs/development.md#justfiles).
 
 | Command | Behavior |
 | --- | --- |
-| `just build` | Configures (with Ninja, Release, `-DKDE_INSTALL_USE_QT_SYS_PATHS=ON`, `-DCMAKE_INSTALL_PREFIX={{prefix}}`) and compiles **never under `sudo`**. |
-| `just test` | Builds and runs `ctest --output-on-failure` (plus `just test-san` using the `debug-asan-ubsan` preset). |
-| `just install` | Builds as user, installs via `sudo cmake --install` (or directly if `prefix` is user-writable), copies `install_manifest.txt` to `$state_dir/install_manifest.txt`, and `chown`s the build manifest back to the current user so `just clean` never fails on root-owned files. |
-| `just uninstall` | Reads `$state_dir/install_manifest.txt` (survives `just clean`), removes listed files, and prunes empty directories **strictly under `com.kogical.*` paths** (never parent system dirs). |
-| `just update [restart=ask]` | Runs `build`, removes stale files from the previous `$state_dir/install_manifest.txt` before installing the new build, then handles `plasmashell` restart according to `restart` (`ask` prompts `[y/N]`, `yes` restarts, `no` skips). Uses `systemctl --user restart plasma-plasmashell.service` when `systemctl --user is-active --quiet plasma-plasmashell` succeeds, only falling back to `kquitapp6 plasmashell && kstart plasmashell` when systemd is not managing it. |
-| `just clean` | Removes `{{build_dir}}` safely (manifest remains preserved in `$state_dir`). |
+| `just build` | Configures the `release` preset once, then builds only the `com.kogical.fluctus.dock` target, **never under `sudo`**. |
+| `just test` / `just test-san` | Builds the dock's test binaries and runs the CTest tests labelled `dock` (Release, or Debug + ASan/UBSan). |
+| `just install` | Removes the files of the previous install, runs `cmake --install --component dock` (with `sudo` only when needed) and keeps the manifest in `$XDG_STATE_HOME/fluctus/dock.manifest`. |
+| `just uninstall` | Deletes the files in that manifest (it survives `just clean`) and prunes empty directories **only under `com.kogical.*` paths**, never parent system directories. |
+| `just update [restart=ask]` | Installs, removes leftovers of the legacy `com.kogical.fluctus` applet, then restarts `plasmashell` according to `restart` (`ask`, `yes`, `no`). Panels still using the legacy id are moved to `com.kogical.fluctus.dock` while `plasmashell` is stopped (a backup of the appletsrc is kept). Uses `systemctl --user` when systemd manages `plasmashell`, else `kquitapp6` / `kstart`. |
+| `just preview` | Opens the installed applet in a standalone `plasmawindowed` window. |

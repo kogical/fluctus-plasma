@@ -128,16 +128,26 @@ PlasmoidItem {
         const isGroupParent = Boolean(tasksModel.data(modelIndex, TaskManager.AbstractTasksModel.IsGroupParent));
         const childCount = Number(tasksModel.data(modelIndex, TaskManager.AbstractTasksModel.ChildCount) || 0);
         if (isGroupParent && childCount > 1) {
+            // Like Plasma's task manager: when the app is in the background, bring back the
+            // window used most recently; once one of its windows is active, cycle to the next.
             let activeChild = -1;
+            let recentChild = 0;
+            let recentTime = -1;
             for (let c = 0; c < childCount; ++c) {
                 const childIdx = tasksModel.makeModelIndex(index, c);
                 if (tasksModel.data(childIdx, TaskManager.AbstractTasksModel.IsActive)) {
                     activeChild = c;
                     break;
                 }
+                const last = tasksModel.data(childIdx, TaskManager.AbstractTasksModel.LastActivated);
+                const time = last ? new Date(last).getTime() : -1;
+                if (time > recentTime) {
+                    recentTime = time;
+                    recentChild = c;
+                }
             }
-            const nextChild = (activeChild >= 0) ? ((activeChild + 1) % childCount) : 0;
-            tasksModel.requestActivate(tasksModel.makeModelIndex(index, nextChild));
+            const target = activeChild >= 0 ? (activeChild + 1) % childCount : recentChild;
+            tasksModel.requestActivate(tasksModel.makeModelIndex(index, target));
             return;
         }
 

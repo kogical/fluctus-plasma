@@ -1,23 +1,35 @@
-# Fluctus Plasma — Engineering & Design Docs
+# Fluctus documentation
 
-This directory contains technical architecture, physics math, and KDE Plasma 6 Wayland engineering documentation for **Fluctus Plasma** (`com.kogical.fluctus`).
+READMEs are for people *using* a component. This directory and each component's `docs/` hold the
+deeper material: architecture, math, research notes and the rules that keep things working.
 
-> Looking for user documentation and installation instructions? See the root [README.md](../README.md).
+## Repository-wide
 
-## Documents
+- [development.md](development.md): how the repository is laid out, how the builds share one
+  cache, the justfile conventions, CI, and how to add a component.
+- [AGENTS.md](../AGENTS.md): hard invariants and coding standards for humans and AI agents alike.
+- [branding/](branding/): logos (`just branding` re-exports the PNGs).
 
-1. [architecture.md](architecture.md) — Target system design: compiled `FluctusApplet : Plasma::Applet`, C++ `DockLayoutItem` owning delegate lifecycle (no `Repeater`), GUI-thread animation loop, axis-agnostic 4-edge + RTL coordinate system, C++23 safety standards, unit tests, and `justfile` workflow.
-2. [macos-dock-physics.md](macos-dock-physics.md) — Mathematical & UX analysis of the dock physics: continuous scale-density integral (zero feedback drift), closed-form magnification curves, exact slack bounds, critically-damped springs, latched bounce physics, and high-DPI scale-only rendering.
-3. [plasma6-wayland-constraints.md](plasma6-wayland-constraints.md) — KDE Plasma 6.8 + Wayland engineering constraints: compiled `Plasma::Applet` (`plasma_add_applet`), panel headroom & bounce thickness formula, `PanelView` blur/mask interplay, `requestPublishDelegateGeometry`, `PW::LibTaskManager`, and global shortcut routing.
-4. [wavetask-audit.md](wavetask-audit.md) — Historical research notes and Plasma 6 task manager packaging findings.
+## Fluctus Dock: [dock/docs/](../dock/docs/README.md)
 
-## Key Engineering Decisions
-
-| Area | Decision |
+| Document | About |
 | --- | --- |
-| **Plasmoid ID & Packaging** | `com.kogical.fluctus`, built as a **compiled `Plasma::Applet`** via `plasma_add_applet` (installing into `${KDE_INSTALL_PLUGINDIR}/plasma/applets/`). |
-| **C++ / QML Boundary** | **C++ `DockLayoutItem` owns delegate instantiation & animation**: manages delegates directly from `model` + `delegate` (no `Repeater`), steps physics on the **GUI thread** (`DockAnimationDriver`), and drives delegates via **`setPosition` + `setScale` only** (never per-frame `setSize`). QML is a thin declarative shell. |
-| **Panel Scaling & Background** | Adaptive panel-aware scaling (`autoScaleToPanel` + cross/primary clamping) prevents Wayland clipping. **Default** background mode leaves panel surface and KWin blur untouched for Plasma themes & Panel Colorizer; **Custom Glass Pill** adds Liquid Glass, Frosted, Acrylic, and Clear Blur via `KWindowEffects::enableBlurBehind` + `enableBackgroundContrast`. |
-| **Panel Orientations & RTL** | **Axis-agnostic 4-edge support** (Bottom, Top, Left, Right) + primary-axis direction sign for RTL / `reverseMode`. |
-| **C++ Standard & Safety** | **C++23**, strict warnings (`-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor`), optional ASan/UBSan preset, `clang-tidy`, and headless `QtTest`/`CTest` unit tests. |
-| **Build Efficiency** | Ninja presets, auto-detected `sccache`/`ccache` & `mold`/`lld`, precompiled headers (`FLUCTUS_USE_PCH`), conditional `fluctus_quick` test target, and incremental `just` recipes. |
+| [architecture.md](../dock/docs/architecture.md) | The compiled applet, C++-owned layout and animation, 4-edge + RTL geometry, C++23 standards |
+| [macos-dock-physics.md](../dock/docs/macos-dock-physics.md) | Magnification curves, drift-free displacement, springs, bounce |
+| [plasma6-wayland-constraints.md](../dock/docs/plasma6-wayland-constraints.md) | What Plasma 6.8 and Wayland allow a panel applet to do |
+| [wavetask-audit.md](../dock/docs/wavetask-audit.md) | Research notes on an earlier Plasma dock |
+
+## Fluctus Glass: [glass/docs/](../glass/docs/README.md)
+
+| Document | About |
+| --- | --- |
+| [liquid-glass-math.md](../glass/docs/liquid-glass-math.md) | Optics and shader specification of the Liquid Glass look |
+| [apple-liquid-glass-re.md](../glass/docs/apple-liquid-glass-re.md) | What is known about Apple's implementation, and how sure we are |
+
+## Libraries
+
+- [libs/glassclient](../libs/glassclient/README.md): asking Fluctus Glass for glass, from QML or C++;
+  the D-Bus protocol lives in `GlassProtocol.hpp`.
+- [libs/liquidglass](../libs/liquidglass/README.md): the `Kogical.LiquidGlass` Qt Quick material.
+- [crates/liquidglass](../crates/liquidglass/README.md): the Rust rendering engine
+  (`just liquidglass doc` for the API reference).
