@@ -11,6 +11,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scintilla:
+    name: scintilla (standalone Rust crate)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: scintilla-${{ hashFiles('Cargo.lock', 'crates/scintilla/Cargo.toml') }}
+          restore-keys: scintilla-
+
+      - name: Check minimal features
+        run: cargo check --locked -p scintilla --no-default-features
+
+      - name: Test default and all features
+        run: |
+          cargo test --locked -p scintilla
+          cargo test --locked -p scintilla --all-features
+
+      - name: Clippy
+        run: |
+          cargo clippy --locked -p scintilla --no-default-features -- -D warnings
+          cargo clippy --locked -p scintilla --all-targets --all-features -- -D warnings
+
   ci:
     name: just ci (Rust + C++ Release + ASan/UBSan + lint)
     runs-on: ubuntu-latest

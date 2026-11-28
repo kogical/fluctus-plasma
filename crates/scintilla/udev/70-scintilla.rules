@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Grant active desktop sessions unprivileged hidraw access for scintilla's
+# proprietary HID battery drivers. Install to /etc/udev/rules.d/70-scintilla.rules
+# and run: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# Keychron (0x3434)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3434", TAG+="uaccess"
+
+# Logitech (0x046d)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", TAG+="uaccess"
+
+# Razer (0x1532)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1532", TAG+="uaccess"
+
+# Corsair (0x1b1c)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1b1c", TAG+="uaccess"
+
+# SteelSeries (0x1038)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1038", TAG+="uaccess"

@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# scintilla, the async connected-device discovery and battery crate.
+# Run `just` here, or `just scintilla <recipe>` from the repository root.
+
+import '../../tools/common.just'
+
+# List the crate recipes
+[private]
+default:
+    @just --list
+
+# Run unit tests across minimal, default, and all features
+test:
+    cargo check --locked -p scintilla --no-default-features
+    cargo test --locked -p scintilla
+    cargo test --locked -p scintilla --all-features
+
+# Type-check minimal (core-only) and full feature sets
+check:
+    cargo check --locked -p scintilla --no-default-features
+    cargo check --locked -p scintilla --all-features
+
+# Lint with clippy
+lint:
+    cargo clippy --locked -p scintilla --no-default-features -- -D warnings
+    cargo clippy --locked -p scintilla --all-targets --all-features -- -D warnings
+
+# Build API documentation
+doc:
+    cargo doc -p scintilla --no-deps --all-features --open
