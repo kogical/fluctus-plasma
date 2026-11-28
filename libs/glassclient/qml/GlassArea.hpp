@@ -9,6 +9,7 @@
 // Draws nothing itself. Leave the area behind it transparent in your window.
 #pragma once
 
+#include "FluctusGlass/GlassProfile.hpp"
 #include "FluctusGlass/GlassRequest.hpp"
 
 #include <QColor>
@@ -29,6 +30,11 @@ class GlassArea : public QQuickItem {
     Q_PROPERTY(QString windowType READ windowType WRITE setWindowType NOTIFY parametersChanged)
     /// Plain (rounded) blur only; becomes glass when Fluctus Glass runs in global mode.
     Q_PROPERTY(bool blurOnly READ blurOnly WRITE setBlurOnly NOTIFY parametersChanged)
+    /// When true, inherit KWin's live global Desktop Effects material instead of explicit properties.
+    Q_PROPERTY(bool followGlobal READ followGlobal WRITE setFollowGlobal NOTIFY parametersChanged)
+    /// Optional JSON GlassProfile string (e.g. bound to Plasmoid.configuration.glassProfile).
+    /// When non-empty, drives followGlobal and all material/pointer parameters (keeping `radius`).
+    Q_PROPERTY(QString profile READ profile WRITE setProfile NOTIFY profileChanged)
 
     /// "glass" (default), "plain" (frosted blur even in global mode) or "none" (no backdrop effect).
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY parametersChanged)
@@ -72,6 +78,10 @@ public:
     void setWindowType(const QString &type);
     [[nodiscard]] bool blurOnly() const { return m_request.isBlurOnly(); }
     void setBlurOnly(bool blurOnly) { m_request.setBlurOnly(blurOnly); Q_EMIT parametersChanged(); }
+    [[nodiscard]] bool followGlobal() const { return m_request.followsGlobal(); }
+    void setFollowGlobal(bool follow);
+    [[nodiscard]] QString profile() const { return m_profileJson; }
+    void setProfile(const QString &json);
 
     [[nodiscard]] QString mode() const { return m_params.mode; }
     void setMode(const QString &value) { if (m_params.mode != value) { m_params.mode = value; pushParameters(); } }
@@ -130,6 +140,7 @@ public:
 
 Q_SIGNALS:
     void parametersChanged();
+    void profileChanged();
     void availableChanged();
     void activeChanged();
 
@@ -138,6 +149,7 @@ protected:
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 private:
+    void applyProfile();
     void pushParameters();
     void setReal(qreal &field, qreal value);
     void setColor(QColor &field, const QColor &value);
@@ -145,10 +157,12 @@ private:
     void attachWindow(QQuickWindow *window);
 
     GlassRequest m_request;
+    GlassProfile m_profile;
     GlassParameters m_params;
     QPointer<QQuickWindow> m_window;
     QMetaObject::Connection m_frameConnection;
     QString m_windowType;
+    QString m_profileJson;
     QRectF m_lastRect;
     bool m_glassEnabled{true};
 };

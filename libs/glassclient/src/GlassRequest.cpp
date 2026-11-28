@@ -18,10 +18,39 @@
 #include <QPolygon>
 
 #include <algorithm>
+#include <cmath>
 
 namespace fluctus::glass {
 
 namespace {
+
+void readReal(const QVariantMap &map, QLatin1StringView key, qreal &out, qreal lo, qreal hi) {
+    const auto it = map.constFind(QString(key));
+    if (it == map.cend()) {
+        return;
+    }
+    bool ok = false;
+    const qreal value = it->toDouble(&ok);
+    if (ok && std::isfinite(value)) {
+        out = std::clamp(value, lo, hi);
+    }
+}
+
+void readColor(const QVariantMap &map, QLatin1StringView key, QColor &out) {
+    const auto it = map.constFind(QString(key));
+    if (it == map.cend()) {
+        return;
+    }
+    QColor color;
+    if (it->metaType().id() == QMetaType::QColor) {
+        color = it->value<QColor>();
+    } else {
+        color = QColor::fromString(it->toString());
+    }
+    if (color.isValid()) {
+        out = color;
+    }
+}
 
 QString argb(const QColor &color) {
     return color.name(QColor::HexArgb);
@@ -80,9 +109,122 @@ QVariantMap GlassParameters::toVariantMap() const {
     };
 }
 
-GlassParameters GlassParameters::preset(QStringView name) {
+GlassParameters GlassParameters::fromVariantMap(const QVariantMap &map, const GlassParameters &base) {
+    namespace p = protocol::param;
+    GlassParameters m = base;
+    if (const auto presetIt = map.constFind(QString(p::kPreset)); presetIt != map.cend()) {
+        const QString name = presetIt->toString();
+        if (name != p::kPresetGlobal) {
+            m = preset(name);
+        }
+    }
+    if (const auto modeIt = map.constFind(QString(p::kMode)); modeIt != map.cend()) {
+        const QString val = modeIt->toString();
+        if (val == p::kModeGlass || val == p::kModePlain || val == p::kModeNone) {
+            m.mode = val;
+        }
+    }
+    readReal(map, p::kIntensity, m.intensity, 0.0, 2.0);
+    readReal(map, p::kRadius, m.radius, 0.0, 4096.0);
+    readReal(map, p::kInset, m.inset, -64.0, 64.0);
+    readColor(map, p::kTint, m.tint);
+    readReal(map, p::kBezel, m.bezel, 0.0, 256.0);
+    readReal(map, p::kRefraction, m.refraction, 0.0, 128.0);
+    readReal(map, p::kMagnify, m.magnify, 0.0, 0.45);
+    readReal(map, p::kEdgeBend, m.edgeBend, 0.0, 1.0);
+    readReal(map, p::kDispersion, m.dispersion, 0.0, 1.0);
+    readReal(map, p::kFrost, m.frost, 0.0, 1.0);
+    readReal(map, p::kSaturation, m.saturation, 0.0, 4.0);
+    readReal(map, p::kBrightness, m.brightness, 0.0, 4.0);
+    readReal(map, p::kEdgeShade, m.edgeShade, 0.0, 1.0);
+    readReal(map, p::kGrain, m.grain, 0.0, 1.0);
+    readReal(map, p::kHighlight, m.highlight, 0.0, 4.0);
+    readReal(map, p::kHighlightWidth, m.highlightWidth, 0.0, 64.0);
+    readReal(map, p::kSheen, m.sheen, 0.0, 1.0);
+    readReal(map, p::kLightAngle, m.lightAngle, -360.0, 360.0);
+    readColor(map, p::kInnerBorder, m.innerBorder);
+    readColor(map, p::kOuterBorder, m.outerBorder);
+    readReal(map, p::kBorderWidth, m.borderWidth, 0.0, 16.0);
+    readColor(map, p::kShadowColor, m.shadowColor);
+    readReal(map, p::kShadowBlur, m.shadowBlur, 0.0, 128.0);
+    readReal(map, p::kShadowOffsetX, m.shadowOffsetX, -128.0, 128.0);
+    readReal(map, p::kShadowOffsetY, m.shadowOffsetY, -128.0, 128.0);
+    readReal(map, p::kPointerLight, m.pointerLight, 0.0, 1.0);
+    readReal(map, p::kPointerBulge, m.pointerBulge, 0.0, 64.0);
+    readReal(map, p::kPointerRadius, m.pointerRadius, 1.0, 1024.0);
+    return m;
+}
+
+GlassParameters GlassParameters::fromVariantMap(const QVariantMap &map) {
+    return fromVariantMap(map, GlassParameters{});
+}
+
+GlassParameters GlassParameters::globalFallback() {
     GlassParameters m;
-    if (name == QLatin1String("crystal")) {
+    m.intensity = 1.0;
+    m.refraction = 24.0;
+    m.bezel = 28.0;
+    m.magnify = 0.0;
+    m.dispersion = 0.30;
+    m.frost = 0.15;
+    m.saturation = 1.50;
+    m.brightness = 1.05;
+    m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.05F);
+    m.highlight = 1.0;
+    m.edgeShade = 0.03;
+    m.sheen = 0.06;
+    m.pointerLight = 0.6;
+    m.pointerBulge = 6.0;
+    m.shadowColor = Qt::transparent;
+    return m;
+}
+
+GlassParameters GlassParameters::preset(QStringView name) {
+    namespace p = protocol::param;
+    GlassParameters m;
+    if (name == p::kPresetLight) {
+        m.intensity = 0.55;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.03F);
+        m.bezel = 22.0;
+        m.refraction = 18.0;
+        m.magnify = 0.04;
+        m.edgeBend = 0.10;
+        m.dispersion = 0.18;
+        m.frost = 0.20;
+        m.saturation = 1.15;
+        m.brightness = 1.02;
+        m.highlight = 0.55;
+        m.sheen = 0.04;
+        m.pointerBulge = 3.0;
+    } else if (name == p::kPresetMedium) {
+        m.intensity = 1.0;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.04F);
+        m.bezel = 36.0;
+        m.refraction = 32.0;
+        m.magnify = 0.12;
+        m.edgeBend = 0.14;
+        m.dispersion = 0.40;
+        m.frost = 0.18;
+        m.saturation = 1.35;
+        m.brightness = 1.04;
+        m.highlight = 0.85;
+        m.sheen = 0.05;
+        m.pointerBulge = 6.0;
+    } else if (name == p::kPresetFull) {
+        m.intensity = 1.25;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.015F);
+        m.bezel = 64.0;
+        m.refraction = 60.0;
+        m.magnify = 0.34;
+        m.edgeBend = 0.15;
+        m.dispersion = 0.74;
+        m.frost = 0.24;
+        m.saturation = 1.30;
+        m.brightness = 1.03;
+        m.highlight = 1.0;
+        m.sheen = 0.04;
+        m.pointerBulge = 8.0;
+    } else if (name == p::kPresetCrystal) {
         m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.02F);
         m.bezel = 40.0;
         m.refraction = 44.0;
@@ -93,6 +235,10 @@ GlassParameters GlassParameters::preset(QStringView name) {
         m.saturation = 1.35;
         m.highlight = 1.25;
         m.highlightWidth = 5.0;
+    } else if (name == p::kModePlain) {
+        m.mode = QString(p::kModePlain);
+    } else if (name == p::kModeNone) {
+        m.mode = QString(p::kModeNone);
     }
     return m;
 }
@@ -261,6 +407,18 @@ bool GlassRequest::isBlurOnly() const {
     return m_blurOnly;
 }
 
+void GlassRequest::setFollowGlobal(bool follow) {
+    if (m_followGlobal == follow) {
+        return;
+    }
+    m_followGlobal = follow;
+    scheduleSync();
+}
+
+bool GlassRequest::followsGlobal() const {
+    return m_followGlobal;
+}
+
 bool GlassRequest::isAvailable() const {
     return m_available;
 }
@@ -342,15 +500,23 @@ QVariantMap GlassRequest::matchMap() const {
 }
 
 QVariantMap GlassRequest::paramMap() const {
-    GlassParameters params = m_params;
-    if (m_manageBlur && !m_region.isEmpty()) {
-        params.inset = 1.0; // undo roundedRegion()'s inset
+    namespace p = protocol::param;
+    QVariantMap map;
+    if (m_followGlobal) {
+        map.insert(QString(p::kFollowGlobal), true);
+        map.insert(QString(p::kRadius), m_params.radius);
+        map.insert(QString(p::kInset), (m_manageBlur && !m_region.isEmpty()) ? 1.0 : m_params.inset);
+    } else {
+        GlassParameters params = m_params;
+        if (m_manageBlur && !m_region.isEmpty()) {
+            params.inset = 1.0; // undo roundedRegion()'s inset
+        }
+        map = params.toVariantMap();
     }
-    QVariantMap map = params.toVariantMap();
     if (!m_region.isEmpty()) {
         // Selects our piece of the window's blur region (geometry still comes from the region,
         // which is committed with the surface, so it never lags behind a resize).
-        map.insert(QString(protocol::param::kShapes), QVariantList{
+        map.insert(QString(p::kShapes), QVariantList{
             m_region.x(), m_region.y(), m_region.width(), m_region.height(), m_regionRadius,
         });
     }

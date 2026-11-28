@@ -4,12 +4,13 @@ A small Apache-2.0 library that lets any Qt app ask [Fluctus Glass](../../glass/
 Liquid Glass behind parts of its own windows. It only talks D-Bus to the effect and never links
 GPL code, so you can embed it anywhere.
 
-It comes in two pieces:
+It comes in three pieces:
 
 | | For | Installed |
 | --- | --- | --- |
-| `Kogical.FluctusGlass` | QML: the `GlassArea` element | with Fluctus Glass, on the system QML path |
-| `Fluctus::GlassClient` | C++: `fluctus::glass::GlassRequest` | static library inside this repository |
+| `Kogical.FluctusGlass` | QML: `GlassArea`, `GlassProfile`, and `GlassSettingsDialog` | with Fluctus Glass, on the system QML path |
+| `Fluctus::GlassClient` | C++: `GlassRequest`, `GlassProfile`, `GlassProtocol.hpp` | static library inside this repository |
+| `Fluctus::GlassWidgets` | C++ (Qt Widgets): `GlassMaterialWidget`, `GlassSettingsDialog` | static library inside this repository (also embedded by the Desktop Effects KCM) |
 
 ## QML
 
@@ -24,7 +25,36 @@ Window {
         anchors.fill: parent
         anchors.margins: 16
         radius: 24
+        profile: Plasmoid.configuration.glassProfile // optional: tracks a GlassProfile JSON string
     }
+}
+```
+
+To let users customize Liquid Glass for your app or plasmoid only (with **Global Default**, **Light**, **Medium**, **Full**, **Crystal**, **Plain Blur**, **Off**, **Reset to Global Defaults**, and live sliders):
+
+```qml
+import QtQuick.Controls as QQC2
+import Kogical.FluctusGlass
+
+QQC2.Button {
+    text: qsTr("Customize Liquid Glass…")
+    onClicked: glassDialog.open()
+}
+
+GlassSettingsDialog {
+    id: glassDialog
+    profile: page.cfg_glassProfile
+    onProfileChanged: page.cfg_glassProfile = profile
+}
+```
+
+## C++ Widgets
+
+```cpp
+#include <FluctusGlass/GlassSettingsDialog.hpp>
+
+if (const auto updated = fluctus::glass::GlassSettingsDialog::editProfile(savedJson, this)) {
+    savedJson = *updated;
 }
 ```
 

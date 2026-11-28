@@ -11,6 +11,11 @@ GlassArea::GlassArea(QQuickItem *parent)
     : QQuickItem(parent) {
     connect(&m_request, &GlassRequest::availableChanged, this, &GlassArea::availableChanged);
     connect(&m_request, &GlassRequest::activeChanged, this, &GlassArea::activeChanged);
+    connect(&m_profile, &GlassProfile::parametersChanged, this, [this]() {
+        if (!m_profileJson.isEmpty()) {
+            applyProfile();
+        }
+    });
     m_request.setParameters(m_params);
 }
 
@@ -54,6 +59,37 @@ void GlassArea::setWindowType(const QString &type) {
     }
     m_request.setMatchHints(hints);
     Q_EMIT parametersChanged();
+}
+
+void GlassArea::setFollowGlobal(bool follow) {
+    if (m_request.followsGlobal() == follow) {
+        return;
+    }
+    m_request.setFollowGlobal(follow);
+    Q_EMIT parametersChanged();
+}
+
+void GlassArea::setProfile(const QString &json) {
+    if (m_profileJson == json) {
+        return;
+    }
+    m_profileJson = json;
+    if (!m_profileJson.isEmpty()) {
+        m_profile.loadJson(m_profileJson);
+        applyProfile();
+    } else {
+        m_request.setFollowGlobal(false);
+        pushParameters();
+    }
+    Q_EMIT profileChanged();
+}
+
+void GlassArea::applyProfile() {
+    const qreal keptRadius = m_params.radius;
+    m_params = m_profile.parameters();
+    m_params.radius = keptRadius;
+    m_request.setFollowGlobal(m_profile.followsGlobal());
+    pushParameters();
 }
 
 void GlassArea::setReal(qreal &field, qreal value) {

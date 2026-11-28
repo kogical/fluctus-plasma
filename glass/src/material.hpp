@@ -57,7 +57,11 @@ struct Material {
     [[nodiscard]] static Material fromVariantMap(const QVariantMap &map, const Material &base);
     [[nodiscard]] static Material fromVariantMap(const QVariantMap &map);
 
-    /// Built-in looks: "liquid" (the defaults) and "crystal". Unknown names give the defaults.
+    /// Serialises the material fields to protocol keys (shapes omitted).
+    [[nodiscard]] QVariantMap toVariantMap() const;
+
+    /// Built-in looks: "light", "medium", "full", "liquid" (the defaults) and "crystal".
+    /// Unknown names give the defaults.
     [[nodiscard]] static Material preset(QStringView name);
 
     /// Copy with `intensity` folded into the strength parameters (intensity becomes 1).
