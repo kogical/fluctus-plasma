@@ -18,6 +18,8 @@ mod dock
 mod glass
 # liquidglass, the Rust rendering engine behind Fluctus Glass
 mod liquidglass 'crates/liquidglass'
+# scintilla, the standalone async device discovery and battery crate
+mod scintilla 'crates/scintilla'
 
 # List every recipe
 [private]
@@ -45,14 +47,14 @@ build: (compile preset)
 reconfigure:
     cd "{{ root }}" && cmake --preset "{{ preset }}" -DCMAKE_INSTALL_PREFIX="{{ prefix }}"
 
-# Run every test: the Rust engine, then all C++ tests
-test: liquidglass::test build (ctest preset)
+# Run every test: the Rust crates, then all C++ tests
+test: liquidglass::test scintilla::test build (ctest preset)
 
 # Run the C++ tests under AddressSanitizer + UndefinedBehaviorSanitizer
 test-san: (compile san_preset) (ctest san_preset)
 
 # Run clang-tidy and clippy
-lint: build liquidglass::lint
+lint: build liquidglass::lint scintilla::lint
     # Qt adds this GCC-only flag to GCC builds; clang-tidy (always clang) rejects it.
     run-clang-tidy -quiet -removed-arg=-mno-direct-extern-access -p "{{ build_dir }}" '^{{ root }}/(dock/src|libs/glassclient|glass/(src|kcm))/.*\.cpp$'
 

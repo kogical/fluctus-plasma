@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "scintilla"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+description = "Async connected device discovery and battery level reading across standard OS interfaces and proprietary peripheral protocols"
+readme = "README.md"
+repository = "https://github.com/kogical/fluctus"
+keywords = ["battery", "bluetooth", "hid", "upower", "linux"]
+categories = ["hardware-support", "os::linux-apis", "asynchronous"]
+
+[features]
+default = ["sysfs", "upower", "bluez", "hidraw", "vendors"]
+
+# Standardized Linux providers
+sysfs = []
+upower = ["dep:zbus"]
+bluez = ["dep:zbus"]
+hidraw = ["dep:libc"]
+rfcomm = ["dep:libc"]
+
+# Proprietary vendor quirk modules (best-effort, see HALL-OF-SHAME.md)
+vendors = [
+    "vendor-keychron",
+    "vendor-logitech",
+    "vendor-razer",
+    "vendor-corsair",
+    "vendor-steelseries",
+    "vendor-apple-airpods",
+    "vendor-sony-audio",
+    "vendor-samsung-buds",
+    "vendor-bose",
+]
+vendor-keychron = ["hidraw"]
+vendor-logitech = ["hidraw"]
+vendor-razer = ["hidraw"]
+vendor-corsair = ["hidraw"]
+vendor-steelseries = ["hidraw"]
+vendor-apple-airpods = ["bluez"]
+vendor-sony-audio = ["bluez", "rfcomm"]
+vendor-samsung-buds = ["bluez", "rfcomm"]
+vendor-bose = ["bluez", "rfcomm"]
+
+# Optional serialization support for UI/IPC consumers
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = "2"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "rt", "sync", "time"] }
+zbus = { version = "5", default-features = false, features = ["tokio"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2", optional = true }
