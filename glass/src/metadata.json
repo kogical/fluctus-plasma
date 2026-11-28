@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kogical"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Liquid Glass with real refraction behind windows that request it, or in place of blur everywhere",
+        "EnabledByDefault": false,
+        "Id": "fluctusglass",
+        "License": "GPL-3.0-or-later",
+        "Name": "Fluctus Glass",
+        "Website": "https://github.com/kogical/fluctus"
+    },
+    "X-KDE-ConfigModule": "kwin_fluctusglass_config"
+}

@@ -67,6 +67,7 @@ jobs:
             ccache \
             lld \
             clang \
+            rust \
             extra-cmake-modules \
             qt6-base \
             qt6-declarative \
@@ -80,6 +81,11 @@ jobs:
             kio \
             libplasma \
             plasma-workspace
+
+      - name: Test Rust liquidglass crate (core + naga codegen + gl/ffi check)
+        run: |
+          cargo test --manifest-path crates/liquidglass/Cargo.toml
+          cargo check --manifest-path crates/liquidglass/Cargo.toml --no-default-features --features "gl,ffi"
 
       - name: Zero ccache stats
         run: ccache -z
@@ -104,7 +110,7 @@ jobs:
 
       - name: Run clang-tidy on C++23 sources
         run: |
-          find src -name '*.cpp' -print0 | xargs -0 -n1 -P "$(nproc)" \
+          find dock/src libs/glassclient -name '*.cpp' -print0 | xargs -0 -n1 -P "$(nproc)" \
             clang-tidy -p build/release --quiet
 
       - name: Print ccache statistics
@@ -115,5 +121,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fluctus-applet-linux-x86_64
-          path: build/release/bin/plasma/applets/com.kogical.fluctus.so
+          path: build/release/bin/plasma/applets/com.kogical.fluctus.dock.so
           retention-days: 14

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Kogical
+    SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile arg="true"/>
+    <group name="Effect-fluctusglass">
+        <!-- Global mode: Liquid Glass for every blur request, replacing stock blur. -->
+        <entry name="GlobalMode" type="Bool"><default>false</default></entry>
+        <entry name="GlobalWindows" type="Bool"><default>true</default></entry>
+        <entry name="GlobalDecorations" type="Bool"><default>true</default></entry>
+        <entry name="GlobalMenus" type="Bool"><default>true</default></entry>
+        <entry name="GlobalPanels" type="Bool"><default>true</default></entry>
+        <entry name="GlobalNotifications" type="Bool"><default>true</default></entry>
+        <entry name="ExcludedClasses" type="String"><default></default></entry>
+        <entry name="ForcedClasses" type="String"><default></default></entry>
+
+        <!-- Corner radius for global-mode shapes; -1 = detect from the window / blur region. -->
+        <entry name="WindowRadius" type="Int"><default>-1</default><min>-1</min><max>256</max></entry>
+        <entry name="MenuRadius" type="Int"><default>-1</default><min>-1</min><max>256</max></entry>
+        <entry name="PanelRadius" type="Int"><default>-1</default><min>-1</min><max>256</max></entry>
+
+        <!-- Global-mode material (percentages / px, converted by the effect). -->
+        <entry name="Intensity" type="Int"><default>100</default><min>0</min><max>200</max></entry>
+        <entry name="Refraction" type="Int"><default>24</default><min>0</min><max>128</max></entry>
+        <entry name="Bezel" type="Int"><default>28</default><min>0</min><max>128</max></entry>
+        <entry name="Magnify" type="Int"><default>0</default><min>0</min><max>30</max></entry>
+        <entry name="Dispersion" type="Int"><default>30</default><min>0</min><max>100</max></entry>
+        <entry name="Frost" type="Int"><default>15</default><min>0</min><max>100</max></entry>
+        <entry name="Saturation" type="Int"><default>150</default><min>0</min><max>300</max></entry>
+        <entry name="Brightness" type="Int"><default>105</default><min>50</min><max>200</max></entry>
+        <entry name="TintColor" type="Color"><default>#ffffff</default></entry>
+        <entry name="TintStrength" type="Int"><default>5</default><min>0</min><max>100</max></entry>
+        <entry name="Highlight" type="Int"><default>100</default><min>0</min><max>200</max></entry>
+        <entry name="EdgeShade" type="Int"><default>3</default><min>0</min><max>100</max></entry>
+        <entry name="Sheen" type="Int"><default>6</default><min>0</min><max>100</max></entry>
+
+        <!-- Pointer -->
+        <entry name="PointerEffects" type="Bool"><default>true</default></entry>
+        <entry name="PointerBulge" type="Int"><default>6</default><min>0</min><max>32</max></entry>
+    </group>
+</kcfg>

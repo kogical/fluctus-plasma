@@ -1,0 +1,28 @@
+language = "C"
+include_guard = "LIQUIDGLASS_H"
+pragma_once = true
+autogen_warning = "/* Generated automatically by cbindgen from crates/liquidglass — do not edit by hand. */"
+cpp_compat = true
+style = "both"
+
+[export]
+include = [
+    "LgYOrigin",
+    "LgPixelFormat",
+    "LgStatus",
+    "LgColor",
+    "LgRect",
+    "LgRectI",
+    "LgMaterial",
+    "LgShape",
+    "LgPointerState",
+    "LgBackdropDesc",
+    "LgTargetDesc",
+    "LgRenderParams",
+    "LgGlRenderer",
+    "LgGlProcAddr",
+]
+
+[enum]
+prefix_with_name = true
+rename_variants = "ScreamingSnakeCase"

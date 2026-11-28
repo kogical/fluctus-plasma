@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/LayoutTemplate",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kogical"
+            }
+        ],
+        "Category": "",
+        "Description": "Transparent headroom bottom dock panel pre-configured for Fluctus Dock",
+        "EnabledByDefault": true,
+        "Id": "com.kogical.fluctus.dock.panel",
+        "License": "Apache-2.0",
+        "Name": "Fluctus Dock Panel"
+    },
+    "X-Plasma-ContainmentCategories": [
+        "panel"
+    ],
+    "X-Plasma-Shell": "plasmashell"
+}
