@@ -19,6 +19,10 @@ deeper material: architecture, math, research notes and the rules that keep thin
 | [plasma6-wayland-constraints.md](../dock/docs/plasma6-wayland-constraints.md) | What Plasma 6.8 and Wayland allow a panel applet to do |
 | [wavetask-audit.md](../dock/docs/wavetask-audit.md) | Research notes on an earlier Plasma dock |
 
+## Fluctus Battery: [battery/README.md](../battery/README.md)
+
+Adaptive Liquid Glass battery monitor plasmoid powered by `scintilla` and `Kogical.FluctusGlass`.
+
 ## Fluctus Glass: [glass/docs/](../glass/docs/README.md)
 
 | Document | About |

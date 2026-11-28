@@ -45,6 +45,8 @@
 //! ```
 
 pub mod error;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod manager;
 pub mod model;
 pub mod providers;
