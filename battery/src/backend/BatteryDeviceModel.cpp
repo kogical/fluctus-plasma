@@ -39,11 +39,11 @@ namespace {
     case core::Transport::Usb:
         return QStringLiteral("USB");
     case core::Transport::WirelessDongle:
-        return QStringLiteral("Wireless");
+        return QStringLiteral("2.4 GHz");
     case core::Transport::BluetoothClassic:
         return QStringLiteral("Bluetooth");
     case core::Transport::Ble:
-        return QStringLiteral("BLE");
+        return QStringLiteral("Bluetooth");
     case core::Transport::Unknown:
     default:
         return {};
@@ -87,17 +87,17 @@ namespace {
 [[nodiscard]] QString unavailableLabel(core::UnavailableReason reason) {
     switch (reason) {
     case core::UnavailableReason::NoBattery:
-        return QStringLiteral("Connected");
+        return QStringLiteral("No battery");
     case core::UnavailableReason::UnsupportedProtocol:
-        return QStringLiteral("No battery telemetry");
+        return QStringLiteral("Battery level not available");
     case core::UnavailableReason::PermissionDenied:
-        return QStringLiteral("Permission needed (udev)");
+        return QStringLiteral("Needs access, see Settings");
     case core::UnavailableReason::StackFeatureDisabled:
-        return QStringLiteral("Bluetooth experimental off");
+        return QStringLiteral("Needs Bluetooth experimental features");
     case core::UnavailableReason::DeviceAsleep:
-        return QStringLiteral("Asleep");
+        return QStringLiteral("Asleep or out of range");
     case core::UnavailableReason::ReadError:
-        return QStringLiteral("Read error");
+        return QStringLiteral("Couldn't read the battery");
     case core::UnavailableReason::None:
     default:
         return {};
@@ -275,6 +275,8 @@ QVariant BatteryDeviceModel::data(const QModelIndex &index, int role) const {
         return static_cast<int>(dev.cells.size());
     case IsPrimaryRole:
         return !m_summary.primaryId.empty() && dev.id == m_summary.primaryId;
+    case NeedsPermissionRole:
+        return !dev.powerAvailable && dev.unavailableReason == core::UnavailableReason::PermissionDenied;
     default:
         return {};
     }
@@ -305,6 +307,7 @@ QHash<int, QByteArray> BatteryDeviceModel::roleNames() const {
         {CellsRole, "cells"},
         {CellCountRole, "cellCount"},
         {IsPrimaryRole, "isPrimary"},
+        {NeedsPermissionRole, "needsPermission"},
     };
 }
 
@@ -355,9 +358,15 @@ void BatteryDeviceModel::rebuildFiltered() {
         m_filterOptions.preferredDeviceId
     );
 
+    QStringList needing;
+    for (const auto &name : core::devicesNeedingPermission(m_rawDevices)) {
+        needing.push_back(QString::fromStdString(name));
+    }
+
     beginResetModel();
     m_filtered = std::move(next);
     m_summary = std::move(nextSummary);
+    m_permissionNeeded = std::move(needing);
     endResetModel();
     Q_EMIT summaryChanged();
 }

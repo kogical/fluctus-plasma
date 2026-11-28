@@ -14,9 +14,9 @@ PlasmoidItem {
 
     preferredRepresentation: inPanel ? compactRepresentation : fullRepresentation
 
-    // On the desktop, hide Plasma's default opaque card frame when Liquid Glass is active
-    // so Fluctus Glass / LiquidGlass owns the widget surface cleanly.
-    Plasmoid.backgroundHints: (!inPanel && Plasmoid.configuration.useLiquidGlass)
+    // On the desktop the widget draws its own glass (Liquid or Frosted); with "Plasma theme"
+    // Plasma's own card is used instead.
+    Plasmoid.backgroundHints: (!inPanel && Plasmoid.configuration.surfaceMaterial !== 2)
         ? PlasmaCore.Types.NoBackground
         : PlasmaCore.Types.DefaultBackground
 

@@ -44,14 +44,27 @@ target_link_libraries(fluctus_battery_model
 # -----------------------------------------------------------------------------
 set(FLUCTUS_BATTERY_QML_SOURCES
     package/contents/ui/main.qml
-    package/contents/ui/GlassSurface.qml
+    package/contents/ui/Style.js
+    package/contents/ui/CompactView.qml
+    package/contents/ui/FullView.qml
+    package/contents/ui/ListStyleView.qml
+    package/contents/ui/DeviceRow.qml
+    package/contents/ui/RingsStyleView.qml
     package/contents/ui/BatteryRing.qml
     package/contents/ui/BatteryCapsule.qml
-    package/contents/ui/CompactView.qml
-    package/contents/ui/DeviceCard.qml
-    package/contents/ui/FullView.qml
-    package/contents/ui/ConfigGeneral.qml
+    package/contents/ui/WidgetSurface.qml
+    package/contents/ui/GlassSurface.qml
+    package/contents/ui/FrostedSurface.qml
+    package/contents/ui/BatteryPreview.qml
+    package/contents/ui/Presets.js
+    package/contents/ui/ConfigHint.qml
+    package/contents/ui/ConfigSlider.qml
+    package/contents/ui/GlassEffectNotice.qml
+    package/contents/ui/GlassProfileSettings.qml
+    package/contents/ui/ConfigPresets.qml
     package/contents/ui/ConfigAppearance.qml
+    package/contents/ui/ConfigDevices.qml
+    package/contents/ui/ConfigBehavior.qml
     package/contents/config/config.qml
 )
 
@@ -142,6 +155,13 @@ if(ECM_FOUND)
     )
 
     fluctus_allow_sanitizer_undefs(${FLUCTUS_BATTERY_APPLET_ID})
+
+    # Lets the logged-in user read vendor HID batteries (Keychron, Logitech, Razer, Corsair,
+    # SteelSeries receivers) without root. udev only reads rules under /usr/lib or /etc, so with
+    # another prefix the Devices settings page shows the one-line command instead.
+    install(FILES "${PROJECT_SOURCE_DIR}/crates/scintilla/udev/70-scintilla.rules"
+        DESTINATION lib/udev/rules.d
+    )
 endif()
 
 if(FLUCTUS_BUILD_TESTS)

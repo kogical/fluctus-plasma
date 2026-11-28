@@ -36,6 +36,18 @@ use crate::model::PowerState;
 /// Boxed async future alias for dyn-compatible driver traits.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// What a vendor driver learned about the peripheral behind a receiver, independent of
+/// whether its battery could be read (e.g. "Keychron M6" behind a "Keychron Link-KM").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorIdentity {
+    /// Product name of the paired peripheral.
+    pub name: String,
+    /// Peripheral category.
+    pub category: crate::model::DeviceCategory,
+    /// `false` when the receiver knows the peripheral but it is asleep or out of range.
+    pub connected: bool,
+}
+
 /// Async driver for a proprietary USB/2.4 GHz HID peripheral accessed via `/dev/hidraw*`.
 #[cfg(all(feature = "hidraw", feature = "sysfs"))]
 pub trait HidVendorDriver: Send + Sync {
@@ -51,6 +63,16 @@ pub trait HidVendorDriver: Send + Sync {
         info: &'a crate::providers::sysfs::HidrawDeviceInfo,
         dev: &'a crate::providers::hidraw::HidrawDevice,
     ) -> BoxFuture<'a, Option<PowerState>>;
+
+    /// Identifies the peripheral behind a receiver so a device whose battery cannot be read
+    /// still shows under its own name. Defaults to `None`.
+    fn identify<'a>(
+        &'a self,
+        _info: &'a crate::providers::sysfs::HidrawDeviceInfo,
+        _dev: &'a crate::providers::hidraw::HidrawDevice,
+    ) -> BoxFuture<'a, Option<VendorIdentity>> {
+        Box::pin(async { None })
+    }
 }
 
 /// Async driver for a proprietary Bluetooth device (passive BLE advertisements or RFCOMM).

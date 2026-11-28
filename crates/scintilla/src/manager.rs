@@ -119,74 +119,20 @@ impl Manager {
             }
         }
 
-        // 4. Connected HID stubs + standard USB HID Power Page (0x84/0x85) + HID vendor quirks.
+        // 4. Standard USB HID Power Page (0x84/0x85) + HID vendor quirks, then connected HID
+        //    stubs. Vendor observations go first so a paired peripheral's own name (e.g.
+        //    "Keychron M6") wins over the receiver's generic product string when merged.
         #[cfg(feature = "sysfs")]
         {
             let hidraw_list = crate::providers::sysfs::enumerate_hidraw_devices().await;
-            if self.config.include_stubs {
-                observations.extend(crate::providers::sysfs::discover_hid_stubs(&hidraw_list).await);
-            }
 
             #[cfg(feature = "hidraw")]
             if self.config.enable_vendor_probing {
-                let hid_drivers = crate::vendors::hid_drivers();
-                for info in &hidraw_list {
-                    let dev = crate::providers::hidraw::HidrawDevice::new(&info.dev_path);
+                observations.extend(probe_hid_devices(&hidraw_list).await);
+            }
 
-                    // First try standard USB HID Battery System Usage Page (0x85).
-                    if let Ok(Some(report)) = dev.read_standard_hid_battery().await {
-                        observations.push(RawObservation {
-                            addresses: vec![
-                                DeviceAddress::HidrawPath(info.dev_path.clone()),
-                                DeviceAddress::Usb {
-                                    vendor_id: info.vendor_id,
-                                    product_id: info.product_id,
-                                    serial: info.uniq.clone(),
-                                    bus_addr: None,
-                                },
-                            ],
-                            name: (!info.name.is_empty()).then(|| info.name.clone()),
-                            vendor: None,
-                            model: None,
-                            vendor_id: Some(info.vendor_id),
-                            product_id: Some(info.product_id),
-                            category: crate::providers::sysfs::infer_category_from_name(&info.name),
-                            transport: Transport::Usb,
-                            power: PowerState::Available(report),
-                        });
-                        continue;
-                    }
-
-                    // Otherwise try matching proprietary vendor modules.
-                    for driver in &hid_drivers {
-                        if driver.matches(info)
-                            && let Some(power) = driver.read_power(info, &dev).await
-                        {
-                            observations.push(RawObservation {
-                                addresses: vec![
-                                    DeviceAddress::HidrawPath(info.dev_path.clone()),
-                                    DeviceAddress::Usb {
-                                        vendor_id: info.vendor_id,
-                                        product_id: info.product_id,
-                                        serial: info.uniq.clone(),
-                                        bus_addr: None,
-                                    },
-                                ],
-                                name: (!info.name.is_empty()).then(|| info.name.clone()),
-                                vendor: None,
-                                model: None,
-                                vendor_id: Some(info.vendor_id),
-                                product_id: Some(info.product_id),
-                                category: crate::providers::sysfs::infer_category_from_name(
-                                    &info.name,
-                                ),
-                                transport: Transport::WirelessDongle,
-                                power,
-                            });
-                            break;
-                        }
-                    }
-                }
+            if self.config.include_stubs {
+                observations.extend(crate::providers::sysfs::discover_hid_stubs(&hidraw_list).await);
             }
         }
 
@@ -336,6 +282,79 @@ impl Manager {
             )),
         }
     }
+}
+
+/// Reads standard HID batteries and vendor drivers on every `hidraw` node.
+#[cfg(all(feature = "sysfs", feature = "hidraw"))]
+async fn probe_hid_devices(
+    hidraw_list: &[crate::providers::sysfs::HidrawDeviceInfo],
+) -> Vec<RawObservation> {
+    let hid_drivers = crate::vendors::hid_drivers();
+    let mut observations = Vec::new();
+
+    for info in hidraw_list {
+        let dev = crate::providers::hidraw::HidrawDevice::new(&info.dev_path);
+        let observation = |power: PowerState, transport: Transport| RawObservation {
+            addresses: vec![
+                DeviceAddress::HidrawPath(info.dev_path.clone()),
+                DeviceAddress::Usb {
+                    vendor_id: info.vendor_id,
+                    product_id: info.product_id,
+                    serial: info.uniq.clone(),
+                    bus_addr: None,
+                },
+            ],
+            name: (!info.name.is_empty()).then(|| info.name.clone()),
+            vendor: None,
+            model: None,
+            vendor_id: Some(info.vendor_id),
+            product_id: Some(info.product_id),
+            category: crate::providers::sysfs::infer_category_from_name(&info.name),
+            transport,
+            power,
+        };
+
+        // First try the standard USB HID Battery System Usage Page (0x85).
+        if let Ok(Some(report)) = dev.read_standard_hid_battery().await {
+            observations.push(observation(PowerState::Available(report), Transport::Usb));
+            continue;
+        }
+
+        // Otherwise the first matching proprietary vendor module.
+        let Some(driver) = hid_drivers.iter().find(|d| d.matches(info)) else {
+            continue;
+        };
+        let power = driver.read_power(info, &dev).await;
+        let permission_denied = matches!(
+            power,
+            Some(PowerState::Unavailable {
+                reason: UnavailableReason::PermissionDenied { .. }
+            })
+        );
+        let identity = if permission_denied {
+            None
+        } else {
+            driver.identify(info, &dev).await
+        };
+        if power.is_none() && identity.is_none() {
+            continue;
+        }
+
+        let fallback = match identity {
+            Some(ref id) if !id.connected => UnavailableReason::DeviceAsleep,
+            _ => UnavailableReason::UnsupportedProtocol,
+        };
+        let mut obs = observation(
+            power.unwrap_or(PowerState::Unavailable { reason: fallback }),
+            Transport::WirelessDongle,
+        );
+        if let Some(id) = identity {
+            obs.name = Some(id.name);
+            obs.category = id.category;
+        }
+        observations.push(obs);
+    }
+    observations
 }
 
 async fn run_polling_watch(

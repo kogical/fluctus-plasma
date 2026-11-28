@@ -36,6 +36,35 @@ private Q_SLOTS:
         QCOMPARE(*coarsePct, 20.0);
     }
 
+    void unreadableBatteriesStayVisibleAndNeedPermission() {
+        auto stub = [](std::string id, core::UnavailableReason reason) {
+            core::BatteryDevice dev;
+            dev.id = id;
+            dev.name = id;
+            dev.powerAvailable = false;
+            dev.unavailableReason = reason;
+            return dev;
+        };
+        const std::vector<core::BatteryDevice> devices{
+            stub("keychron", core::UnavailableReason::PermissionDenied),
+            stub("asleep", core::UnavailableReason::DeviceAsleep),
+            stub("led", core::UnavailableReason::UnsupportedProtocol),
+            stub("keychron", core::UnavailableReason::PermissionDenied),
+        };
+
+        core::FilterOptions hideStubs;
+        hideStubs.showStubs = false;
+        const auto visible = core::sortAndFilterDevices(devices, hideStubs);
+        QCOMPARE(visible.size(), std::size_t{3});
+        for (const auto &dev : visible) {
+            QVERIFY(dev.id != "led");
+        }
+
+        const auto needing = core::devicesNeedingPermission(devices);
+        QCOMPARE(needing.size(), std::size_t{1});
+        QCOMPARE(needing.front(), std::string("keychron"));
+    }
+
     void severityAndFormatting() {
         QCOMPARE(core::classifySeverity(8.0, core::ChargingState::Discharging), core::BatterySeverity::Critical);
         QCOMPARE(core::classifySeverity(18.0, core::ChargingState::Discharging), core::BatterySeverity::Warning);

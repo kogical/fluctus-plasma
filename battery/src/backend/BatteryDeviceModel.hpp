@@ -8,6 +8,7 @@
 #include <QAbstractListModel>
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 
 #include <vector>
@@ -37,6 +38,8 @@ class BatteryDeviceModel final : public QAbstractListModel {
     Q_PROPERTY(int lowCount READ lowCount NOTIFY summaryChanged)
     Q_PROPERTY(int chargingCount READ chargingCount NOTIFY summaryChanged)
     Q_PROPERTY(bool refreshing READ refreshing NOTIFY refreshingChanged)
+    /// Devices whose battery needs a udev rule to be read (see the Devices settings page).
+    Q_PROPERTY(QStringList permissionNeededNames READ permissionNeededNames NOTIFY summaryChanged)
 
 public:
     enum Roles : int {
@@ -63,6 +66,7 @@ public:
         CellsRole,
         CellCountRole,
         IsPrimaryRole,
+        NeedsPermissionRole,
     };
     Q_ENUM(Roles)
 
@@ -105,6 +109,7 @@ public:
     [[nodiscard]] int lowCount() const noexcept { return static_cast<int>(m_summary.lowCount); }
     [[nodiscard]] int chargingCount() const noexcept { return static_cast<int>(m_summary.chargingCount); }
     [[nodiscard]] bool refreshing() const noexcept { return m_refreshing; }
+    [[nodiscard]] QStringList permissionNeededNames() const { return m_permissionNeeded; }
 
 Q_SIGNALS:
     void summaryChanged();
@@ -120,6 +125,7 @@ private:
     double m_criticalThreshold{10.0};
     core::BatterySummary m_summary;
     bool m_refreshing{false};
+    QStringList m_permissionNeeded;
 };
 
 } // namespace fluctus::battery::backend

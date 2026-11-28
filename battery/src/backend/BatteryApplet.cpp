@@ -5,7 +5,18 @@
 
 #include "core/AdaptiveLayout.hpp"
 
+#include "FluctusGlass/GlassProtocol.hpp"
+#include "FluctusGlass/GlassRequest.hpp"
+
+#include <QClipboard>
+#include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusServiceWatcher>
+#include <QDir>
+#include <QGuiApplication>
+#include <QProcess>
 
 #include <algorithm>
 
@@ -29,6 +40,24 @@ namespace {
         return QStringLiteral("desktopExpanded");
     }
     return QStringLiteral("desktopCompact");
+}
+
+const QString kFluctusGlassId = QStringLiteral("fluctusglass");
+
+/// Whether a KWin effect plugin (`<plugin dir>/kwin/effects/plugins/<id>.so`) is installed.
+[[nodiscard]] bool effectInstalled(const QString &id) {
+    const QStringList pluginDirs = QCoreApplication::libraryPaths();
+    return std::ranges::any_of(pluginDirs, [&id](const QString &dir) {
+        const QDir effects(dir + QStringLiteral("/kwin/effects/plugins"));
+        return !effects.entryList({id + QStringLiteral(".*")}, QDir::Files).isEmpty();
+    });
+}
+
+[[nodiscard]] int detectGlassState() {
+    if (fluctus::glass::GlassRequest::serviceRegistered()) {
+        return 2;
+    }
+    return effectInstalled(kFluctusGlassId) ? 1 : 0;
 }
 
 } // namespace
@@ -58,6 +87,18 @@ BatteryApplet::~BatteryApplet() = default;
 void BatteryApplet::init() {
     Plasma::Applet::init();
     connectSystemSignals();
+
+    // Fluctus Glass owns a D-Bus name while it is loaded: follow it so the widget switches
+    // between Liquid Glass and the Frosted fallback as soon as the effect starts or stops.
+    m_glassWatcher = std::make_unique<QDBusServiceWatcher>(
+        QString(fluctus::glass::protocol::kService),
+        QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForOwnerChange
+    );
+    connect(m_glassWatcher.get(), &QDBusServiceWatcher::serviceOwnerChanged,
+            this, &BatteryApplet::refreshGlassEffectState);
+    m_glassEffectState = detectGlassState();
+
     m_pollTimer.start();
     refresh();
 }
@@ -124,6 +165,48 @@ QVariantMap BatteryApplet::layoutMetrics(
         {QStringLiteral("showSecondaryLabel"), m.showSecondaryLabel},
         {QStringLiteral("stackVertically"), m.stackVertically},
     };
+}
+
+void BatteryApplet::refreshGlassEffectState() {
+    const int state = detectGlassState();
+    if (state == m_glassEffectState) {
+        return;
+    }
+    m_glassEffectState = state;
+    Q_EMIT glassEffectStateChanged();
+}
+
+void BatteryApplet::setFluctusGlassEnabled(bool enabled) {
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Effects"),
+        QStringLiteral("org.kde.kwin.Effects"),
+        enabled ? QStringLiteral("loadEffect") : QStringLiteral("unloadEffect")
+    );
+    message << kFluctusGlassId;
+    QDBusConnection::sessionBus().asyncCall(message);
+}
+
+void BatteryApplet::openDesktopEffectsSettings() const {
+    QProcess::startDetached(QStringLiteral("systemsettings"), {QStringLiteral("kcm_kwin_effects")});
+}
+
+void BatteryApplet::copyToClipboard(const QString &text) const {
+    if (QClipboard *clipboard = QGuiApplication::clipboard()) {
+        clipboard->setText(text);
+    }
+}
+
+QString BatteryApplet::udevRuleCommand() {
+    // One line that works in bash, zsh and fish. The vendor list matches
+    // crates/scintilla/udev/70-scintilla.rules (Keychron, Logitech, Razer, Corsair, SteelSeries).
+    return QStringLiteral(
+        "echo 'KERNEL==\"hidraw*\", SUBSYSTEM==\"hidraw\", "
+        "ATTRS{idVendor}==\"3434|046d|1532|1b1c|1038\", TAG+=\"uaccess\"' "
+        "| sudo tee /etc/udev/rules.d/70-scintilla.rules > /dev/null "
+        "&& sudo udevadm control --reload-rules "
+        "&& sudo udevadm trigger --subsystem-match=hidraw"
+    );
 }
 
 void BatteryApplet::scheduleDebouncedRefresh() {

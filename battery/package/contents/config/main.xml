@@ -5,14 +5,23 @@
     <kcfgfile name=""/>
 
     <group name="Appearance">
-        <entry name="useLiquidGlass" type="Bool">
-            <default>true</default>
+        <!-- Preset last applied on the Presets page; cleared when the look is edited by hand. -->
+        <entry name="activePreset" type="String">
+            <default>fluctus</default>
+        </entry>
+        <!-- 0 = list ("Fluctus"), 1 = rings ("macOS") -->
+        <entry name="widgetStyle" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- 0 = Liquid Glass (Frosted until Fluctus Glass runs), 1 = Frosted, 2 = Plasma theme -->
+        <entry name="surfaceMaterial" type="Int">
+            <default>0</default>
         </entry>
         <entry name="glassProfile" type="String">
             <default>{"preset":"global"}</default>
         </entry>
         <entry name="cornerRadius" type="Int">
-            <default>20</default>
+            <default>22</default>
         </entry>
         <entry name="showPercentageInPanel" type="Bool">
             <default>true</default>
