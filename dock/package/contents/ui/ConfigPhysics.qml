@@ -64,7 +64,7 @@ KCM.SimpleKCM {
             from: 1.0
             to: 4.0
             stepSize: 0.1
-            format: function(v) { return i18np("%1 icon", "%1 icons", v.toFixed(1)); }
+            format: function(v) { return i18n("%1 icons", v.toFixed(1)); }
         }
 
         ConfigHint {
