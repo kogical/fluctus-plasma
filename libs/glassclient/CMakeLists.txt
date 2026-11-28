@@ -64,10 +64,14 @@ if(Qt6Widgets_FOUND)
 endif()
 
 if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
+    qt_extract_metatypes(fluctus_glassclient)
+
     set_source_files_properties(qml/GlassSettingsDialog.qml PROPERTIES
         QT_RESOURCE_ALIAS GlassSettingsDialog.qml
     )
-    qt_add_qml_module(fluctus_glass_qml
+    # Build a single self-contained shared QML plugin (backing target == plugin target) so
+    # libfluctus_glass_qmlplugin.so has no external libfluctus_glass_qml.so runtime dependency.
+    qt_add_qml_module(fluctus_glass_qmlplugin
         URI Kogical.FluctusGlass
         VERSION 1.0
         PLUGIN_TARGET fluctus_glass_qmlplugin
@@ -79,17 +83,18 @@ if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
         QML_FILES
             qml/GlassSettingsDialog.qml
     )
-    target_include_directories(fluctus_glass_qml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/qml)
-    target_link_libraries(fluctus_glass_qml PRIVATE
+    target_include_directories(fluctus_glass_qmlplugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/qml)
+    target_link_libraries(fluctus_glass_qmlplugin PRIVATE
         fluctus_glassclient
         fluctus_warnings
         Qt6::Quick
     )
-    set_target_properties(fluctus_glass_qml PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    fluctus_allow_sanitizer_undefs(fluctus_glass_qml)
-    # KDECMakeSettings drops the "lib" prefix from modules, but the QML engine looks for
-    # lib<plugin>.so as named in qmldir.
-    set_target_properties(fluctus_glass_qmlplugin PROPERTIES PREFIX "lib")
+    set_target_properties(fluctus_glass_qmlplugin PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        # KDECMakeSettings drops the "lib" prefix from modules, but the QML engine looks for
+        # lib<plugin>.so as named in qmldir.
+        PREFIX "lib"
+    )
     fluctus_allow_sanitizer_undefs(fluctus_glass_qmlplugin)
 
     # The QML module ships with Fluctus Glass (the effect it talks to).
@@ -97,7 +102,7 @@ if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
     install(TARGETS fluctus_glass_qmlplugin LIBRARY DESTINATION "${_qmldir}" COMPONENT glass)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/qml/Kogical/FluctusGlass/qmldir"
-        "${CMAKE_CURRENT_BINARY_DIR}/qml/Kogical/FluctusGlass/fluctus_glass_qml.qmltypes"
+        "${CMAKE_CURRENT_BINARY_DIR}/qml/Kogical/FluctusGlass/fluctus_glass_qmlplugin.qmltypes"
         DESTINATION "${_qmldir}" COMPONENT glass)
 endif()
 

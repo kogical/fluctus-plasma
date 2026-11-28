@@ -8,10 +8,12 @@
 
 namespace fluctus::glass {
 
-struct GlassProfileForeign {
-    Q_GADGET
-    QML_FOREIGN(fluctus::glass::GlassProfile)
+class GlassProfileQml : public GlassProfile {
+    Q_OBJECT
     QML_NAMED_ELEMENT(GlassProfile)
+
+public:
+    using GlassProfile::GlassProfile;
 };
 
 } // namespace fluctus::glass

@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0
+#
+# Fluctus Battery. Run `just` here, or `just battery <recipe>` from the repository root.
+
+import '../tools/common.just'
+
+applet := "com.kogical.fluctus.battery"
+
+# List the battery recipes
+[private]
+default:
+    @just --list
+
+# Build the battery applet
+build: (compile preset applet)
+
+# Build and run the battery unit tests
+test: (compile preset "test_battery_core") (ctest preset "battery")
+
+# Same tests under AddressSanitizer + UndefinedBehaviorSanitizer
+test-san: (compile san_preset "test_battery_core") (ctest san_preset "battery")
+
+# Install the battery applet (asks for sudo when the prefix is not writable)
+install: build (install-component "battery")
+
+# Remove the installed battery applet
+uninstall: (uninstall-component "battery")
+
+# Reinstall and optionally restart plasmashell (restart=ask|yes|no)
+update restart="ask": install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{ restart }}" in
+        yes) restart=true ;;
+        no) restart=false ;;
+        ask) read -r -p "Restart plasmashell now? [y/N] " reply
+             [[ "$reply" =~ ^[Yy]$ ]] && restart=true || restart=false ;;
+        *) echo "restart must be ask, yes or no (got '{{ restart }}')" >&2; exit 1 ;;
+    esac
+    if ! $restart || ! pgrep -u "$(id -u)" -x plasmashell >/dev/null; then
+        exit 0
+    fi
+    systemd=false
+    systemctl --user is-active --quiet plasma-plasmashell.service 2>/dev/null && systemd=true
+    if $systemd; then systemctl --user restart plasma-plasmashell.service;
+    else kquitapp6 plasmashell || true; kstart plasmashell >/dev/null 2>&1 & fi
+    echo "Restarted plasmashell."
+
+# Open the installed battery widget in its own window
+preview:
+    plasmawindowed {{ applet }}

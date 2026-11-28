@@ -14,6 +14,8 @@ import 'tools/common.just'
 
 # Fluctus Dock, the Plasma task manager applet
 mod dock
+# Fluctus Battery, the adaptive Liquid Glass battery applet
+mod battery
 # Fluctus Glass, the KWin Liquid Glass effect
 mod glass
 # liquidglass, the Rust rendering engine behind Fluctus Glass
@@ -56,13 +58,13 @@ test-san: (compile san_preset) (ctest san_preset)
 # Run clang-tidy and clippy
 lint: build liquidglass::lint scintilla::lint
     # Qt adds this GCC-only flag to GCC builds; clang-tidy (always clang) rejects it.
-    run-clang-tidy -quiet -removed-arg=-mno-direct-extern-access -p "{{ build_dir }}" '^{{ root }}/(dock/src|libs/glassclient|glass/(src|kcm))/.*\.cpp$'
+    run-clang-tidy -quiet -removed-arg=-mno-direct-extern-access -p "{{ build_dir }}" '^{{ root }}/(dock/src|battery/src|libs/glassclient|glass/(src|kcm))/.*\.cpp$'
 
 # Everything CI checks
 ci: test test-san lint
 
 # Install every component that can be built here (asks for sudo when needed)
-install: dock::install
+install: dock::install battery::install
     #!/usr/bin/env bash
     if grep -q '^FLUCTUS_GLASS_KWIN_VERSION:' "{{ build_dir }}/CMakeCache.txt"; then
         just glass install
@@ -71,10 +73,10 @@ install: dock::install
     fi
 
 # Remove every installed component
-uninstall: dock::uninstall glass::uninstall
+uninstall: dock::uninstall battery::uninstall glass::uninstall
 
 # Reinstall everything, reload the glass effect and restart plasmashell (restart=ask|yes|no)
-update restart="ask": (dock::update restart)
+update restart="ask": (dock::update restart) (battery::update restart)
     #!/usr/bin/env bash
     if grep -q '^FLUCTUS_GLASS_KWIN_VERSION:' "{{ build_dir }}/CMakeCache.txt"; then
         just glass update
