@@ -11,7 +11,7 @@
         "Id": "fluctusglass",
         "License": "GPL-3.0-or-later",
         "Name": "Fluctus Glass",
-        "Website": "https://github.com/kogical/fluctus"
+        "Website": "https://github.com/kogical/fluctus/tree/main/glass"
     },
     "X-KDE-ConfigModule": "kwin_fluctusglass_config"
 }

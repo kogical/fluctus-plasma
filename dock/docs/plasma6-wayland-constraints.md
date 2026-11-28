@@ -23,7 +23,7 @@ Instead of installing a global QML module into `/usr/lib/qt6/qml/` (like WaveTas
   - Builds a shared plugin `${id}.so` and installs it directly to `${KDE_INSTALL_PLUGINDIR}/plasma/applets/`.
   - Calls `ecm_add_qml_module(${id} URI "plasma.applet.${id}" QT_NO_PLUGIN ...)` and embeds `QML_SOURCES` / `RESOURCES` cleanly into the plugin — **zero global QML namespace pollution** and no `QML2_IMPORT_PATH` / `KDE_INSTALL_QMLDIR` headaches.
   - Allows a custom C++ `FluctusApplet : public Plasma::Applet` subclass (`K_PLUGIN_CLASS_WITH_JSON`), giving C++ direct access to `containment()`, `location()`, `formFactor()`, `status()`, and `configuration()` without WaveTask's fragile `ContainmentItem_QML` string-matching parent walk.
-- **Hyphen-in-ID verification item (Stage 2 Step 1):** `PlasmaMacros.cmake` replaces `-` with `_` for generated class names, but passes `URI "plasma.applet.${id}"` verbatim to `ecm_add_qml_module`. Since QML sources in the same module do not need an explicit `import` of their own URI, we will verify at Stage 2 scaffold compile time whether `qt_add_qml_module` accepts `com.kogical.fluctus-plasma` cleanly; if Qt6's tooling rejects a hyphen in `URI`, we will use `com.kogical.fluctus` as the applet ID.
+- **Hyphen-in-ID verification item (Stage 2 Step 1):** `PlasmaMacros.cmake` replaces `-` with `_` for generated class names, but passes `URI "plasma.applet.${id}"` verbatim to `ecm_add_qml_module`. Since QML sources in the same module do not need an explicit `import` of their own URI, we will verify at Stage 2 scaffold compile time whether `qt_add_qml_module` accepts `com.kogical.fluctus-plasma` cleanly; if Qt6's tooling rejects a hyphen in `URI`, we will use `com.kogical.fluctus` as the applet ID. *(Resolved: the applet shipped as `com.kogical.fluctus` and is `com.kogical.fluctus.dock` since the monorepo split.)*
 - **Required metadata:** `package/metadata.json` must declare `"X-Plasma-Provides": ["org.kde.plasma.multitasking"]`, and `main.qml` must expose `activateTaskAtIndex(index)` so Plasma shell components can interoperate with Fluctus as a task manager.
 
 ---
@@ -77,6 +77,6 @@ Verified against Plasma 6.8.3 and `~/.config/kglobalshortcutsrc`:
 
 ## 7. Panel Layout Template & Packaging Paths
 
-- **Layout template:** `layout-templates/metadata.json` must declare `"KPackageStructure": "Plasma/LayoutTemplate"` and install to `${KDE_INSTALL_DATADIR}/plasma/layout-templates/com.kogical.fluctus-plasma.panel/`.
+- **Layout template:** `layout-templates/metadata.json` must declare `"KPackageStructure": "Plasma/LayoutTemplate"` and install to `${KDE_INSTALL_DATADIR}/plasma/layout-templates/com.kogical.fluctus.dock.panel/`.
 - **System install paths:** Configure CMake with `-DKDE_INSTALL_USE_QT_SYS_PATHS=ON` so plugins install to `/usr/lib/qt6/plugins/plasma/applets/` on Arch/CachyOS (`/usr/lib64` is a symlink to `/usr/lib`).
 - **Distro packaging note:** Direct `/usr` installs bypass `pacman` on Arch/CachyOS. While `just install` / `uninstall` / `update` will support direct CMake installs cleanly via a persisted manifest, providing a minimal `PKGBUILD` in Stage 2+ is a clean option for tracked package management; for rootless dev installs, `~/.local` works when `QT_PLUGIN_PATH` is set via `~/.config/environment.d/`.

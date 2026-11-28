@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Kogical
 # SPDX-License-Identifier: Apache-2.0
 #
 # Kogical.LiquidGlass — reusable Qt Quick glass material (QML + one fragment shader).
@@ -28,8 +29,7 @@ qt_add_qml_module(kogical_liquidglass
         GlassMaterials.qml
 )
 
-# qsb has no #include support: inline the shared shading core (also used verbatim by the
-# Fluctus Glass KWin effect) into the Qt Quick shader before baking it.
+# qsb has no #include support: inline the shading core into the Qt Quick shader before baking it.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/shaders/liquidglass_core.glsl" _lg_core)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/shaders/liquidglass.frag" _lg_frag)
 string(REPLACE "#include \"liquidglass_core.glsl\"" "${_lg_core}" _lg_frag "${_lg_frag}")
@@ -45,9 +45,6 @@ qt_add_shaders(kogical_liquidglass "kogical_liquidglass_shaders"
     FILES
         "${CMAKE_CURRENT_BINARY_DIR}/shaders/liquidglass.frag"
 )
-
-# Path of the shared core for other components (the KWin effect embeds it in its own qrc).
-set(KOGICAL_LIQUIDGLASS_CORE_GLSL "${CMAKE_CURRENT_SOURCE_DIR}/shaders/liquidglass_core.glsl" CACHE INTERNAL "")
 
 set_target_properties(kogical_liquidglass PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

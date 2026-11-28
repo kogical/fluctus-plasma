@@ -35,8 +35,11 @@ pub extern "C" fn lg_material_crystal() -> LgMaterial {
 }
 
 /// Returns the logical pixel sampling margin required around a shape for refraction & dispersion.
+///
+/// # Safety
+/// `material` must be null or point to a valid, initialized `LgMaterial`.
 #[unsafe(no_mangle)]
-pub extern "C" fn lg_material_sample_margin(material: *const LgMaterial) -> f32 {
+pub unsafe extern "C" fn lg_material_sample_margin(material: *const LgMaterial) -> f32 {
     if material.is_null() {
         return 0.0;
     }
@@ -44,8 +47,11 @@ pub extern "C" fn lg_material_sample_margin(material: *const LgMaterial) -> f32 
 }
 
 /// Returns the logical pixel draw margin required around a shape for shadow & outer borders.
+///
+/// # Safety
+/// `material` must be null or point to a valid, initialized `LgMaterial`.
 #[unsafe(no_mangle)]
-pub extern "C" fn lg_material_draw_margin(material: *const LgMaterial) -> f32 {
+pub unsafe extern "C" fn lg_material_draw_margin(material: *const LgMaterial) -> f32 {
     if material.is_null() {
         return 0.0;
     }

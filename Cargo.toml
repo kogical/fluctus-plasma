@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cargo workspace for every Rust crate in the Fluctus monorepo. One Cargo.lock and one target/
+# directory are shared by `cargo test`, CI and the CMake build of the KWin effect, so each crate
+# compiles once per profile no matter who asks for it.
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/kogical/fluctus"
+
+# Profiles only take effect at the workspace root.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

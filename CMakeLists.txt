@@ -10,7 +10,8 @@
 #
 # Dependencies are discovered once here and shared by every component. Each component installs
 # under its own CMake install component, so `cmake --install <build> --component dock` (used
-# by dock/justfile) touches only that component's files.
+# by dock/justfile) touches only that component's files. Rust crates live in the Cargo
+# workspace next to this file and share its target/ directory.
 cmake_minimum_required(VERSION 3.29)
 
 project(fluctus
@@ -26,7 +27,6 @@ option(FLUCTUS_BUILD_DOCK "Build Fluctus Dock (Plasma applet)" ON)
 option(FLUCTUS_BUILD_GLASS "Build Fluctus Glass (KWin effect; needs KWin development files)" ON)
 option(FLUCTUS_BUILD_GLASS_QML "Build and install the Kogical.FluctusGlass QML module for other apps" ON)
 option(FLUCTUS_BUILD_TESTS "Build unit tests" ON)
-option(FLUCTUS_BUILD_EXAMPLES "Build example programs" OFF)
 option(FLUCTUS_REQUIRE_ECM "Fail if extra-cmake-modules (ECM) is not installed" OFF)
 
 # -----------------------------------------------------------------------------
@@ -58,10 +58,10 @@ if(FLUCTUS_BUILD_TESTS)
 endif()
 
 # -----------------------------------------------------------------------------
-# Shared libraries (always Apache-2.0, never link GPL code)
+# Shared libraries (Apache-2.0, never link GPL code)
 # -----------------------------------------------------------------------------
 add_subdirectory(libs/glassclient)
-if(ECM_FOUND OR FLUCTUS_BUILD_EXAMPLES)
+if(ECM_FOUND)
     add_subdirectory(libs/liquidglass)
 endif()
 

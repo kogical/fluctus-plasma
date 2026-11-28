@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Fluctus Glass. Run `just` here, or `just glass <recipe>` from the repository root.
+
+import '../tools/common.just'
+
+effect := "fluctusglass"
+targets := "fluctusglass kwin_fluctusglass_config fluctus_glass_qmlplugin"
+kwin := "dbus-send --session --print-reply --dest=org.kde.KWin"
+
+# List the glass recipes
+[private]
+default:
+    @just --list
+
+# Build the KWin effect, its settings page and the Kogical.FluctusGlass QML module
+build: (configure preset) (has-kwin preset) (compile preset targets)
+
+# Build and run the effect's unit tests
+test: (configure preset) (has-kwin preset) (compile preset "test_glass_logic") (ctest preset "glass")
+
+# Same tests under AddressSanitizer + UndefinedBehaviorSanitizer
+test-san: (configure san_preset) (has-kwin san_preset) (compile san_preset "test_glass_logic") (ctest san_preset "glass")
+
+# Install the effect (asks for sudo when the prefix is not writable); then run `just glass enable`
+install: build (install-component "glass")
+
+# Remove the installed effect (and turn it off first)
+uninstall: disable-if-installed (uninstall-component "glass")
+
+# Reinstall and reload the effect in the running KWin
+update: install reload
+
+# Load the freshly installed effect into the running KWin (log out and back in after KWin upgrades)
+reload:
+    -@{{ kwin }} /Effects org.kde.kwin.Effects.unloadEffect string:{{ effect }} >/dev/null
+    @{{ kwin }} /Effects org.kde.kwin.Effects.loadEffect string:{{ effect }} >/dev/null
+    @echo "Reloaded {{ effect }} in KWin."
+
+# Turn the effect on, now and for future sessions
+enable:
+    kwriteconfig6 --file kwinrc --group Plugins --key {{ effect }}Enabled true
+    @{{ kwin }} /Effects org.kde.kwin.Effects.loadEffect string:{{ effect }} >/dev/null
+
+# Turn the effect off, now and for future sessions
+disable:
+    kwriteconfig6 --file kwinrc --group Plugins --key {{ effect }}Enabled false
+    -@{{ kwin }} /Effects org.kde.kwin.Effects.unloadEffect string:{{ effect }} >/dev/null 2>&1
+
+# Run the freshly built effect in a nested, isolated KWin (see tools/run-nested.sh for options)
+nested *args: build
+    tools/run-nested.sh "{{ build_dir }}" {{ args }}
+
+# Score the effect against Apple's Liquid Glass reference images (see tools/verify-glass-parity.py)
+parity out=(build_dir / "parity") *args: build
+    python3 tools/verify-glass-parity.py --build "{{ build_dir }}" --out "{{ out }}" {{ args }}
+
+[private]
+disable-if-installed:
+    @[ ! -f "{{ state_dir }}/glass.manifest" ] || just disable
+
+# Stop with a clear message when CMake did not find KWin's development files.
+[private]
+has-kwin p:
+    @grep -q '^FLUCTUS_GLASS_KWIN_VERSION:' "{{ root }}/build/{{ p }}/CMakeCache.txt" || \
+        { echo "Fluctus Glass needs KWin's development files (and Rust). Install them, then run 'just reconfigure'." >&2; exit 1; }

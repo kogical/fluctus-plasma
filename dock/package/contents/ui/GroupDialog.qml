@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQml.Models
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponents3
@@ -15,15 +14,12 @@ PlasmaCore.Dialog {
     id: groupDialog
 
     property var tasksModelRef
-    property var parentModelIndex
     property string groupTitle: ""
     property var groupIcon
     property int groupCount: 0
 
-    // Counted via a dedicated DelegateModel: childDelegateModel only reports a non-zero count
-    // once a Repeater adopts it, and which Repeater adopts it depends on usePreviewCards,
-    // so deriving usePreviewCards from childDelegateModel.count is a binding loop.
-    readonly property int childWindowCount: childCounter.count
+    property int parentRow: -1
+    readonly property int childWindowCount: windowGroup.count
     readonly property bool usePreviewCards: Plasmoid.configuration.showWindowPreviews
         && childWindowCount > 0
         && childWindowCount <= 5
@@ -38,9 +34,7 @@ PlasmaCore.Dialog {
             return;
         }
         visualParent = delegateItem;
-        parentModelIndex = (delegateItem.taskIndex >= 0 && delegateItem.taskIndex < tasksModelRef.count)
-            ? tasksModelRef.makeModelIndex(delegateItem.taskIndex)
-            : delegateItem.modelIndex;
+        parentRow = delegateItem.taskIndex;
         groupTitle = delegateItem.appName || delegateItem.displayTitle;
         groupIcon = delegateItem.decorationIcon;
         groupCount = delegateItem.childCount || 0;
@@ -63,24 +57,17 @@ PlasmaCore.Dialog {
         return title;
     }
 
-    readonly property DelegateModel _childCounter: DelegateModel {
-        id: childCounter
-        model: groupDialog.tasksModelRef
-        rootIndex: groupDialog.parentModelIndex
-        // Never instantiated (no view); only lets the model report its row count.
-        delegate: QtObject {}
+    readonly property TaskGroupWindows _windowGroup: TaskGroupWindows {
+        id: windowGroup
+        tasksModel: groupDialog.tasksModelRef
+        row: groupDialog.parentRow
+        enabled: groupDialog.visible
 
         onCountChanged: {
             if (groupDialog.visible && count <= 1) {
                 groupDialog.visible = false;
             }
         }
-    }
-
-    readonly property DelegateModel _childModel: DelegateModel {
-        id: childDelegateModel
-        model: groupDialog.tasksModelRef
-        rootIndex: groupDialog.parentModelIndex
     }
 
     mainItem: Item {
@@ -134,12 +121,12 @@ PlasmaCore.Dialog {
                 spacing: Kirigami.Units.smallSpacing
 
                 Repeater {
-                    model: groupDialog.usePreviewCards ? childDelegateModel : null
+                    model: groupDialog.usePreviewCards ? windowGroup.count : 0
 
                     delegate: Rectangle {
                         id: cardDelegate
                         required property int index
-                        required property var model
+                        readonly property var model: windowGroup.windows[index] || ({})
 
                         readonly property string winUuid: (model.WinIdList && model.WinIdList.length > 0)
                             ? String(model.WinIdList[0])
@@ -167,7 +154,7 @@ PlasmaCore.Dialog {
                         TapHandler {
                             acceptedButtons: Qt.LeftButton
                             onTapped: {
-                                const idx = childDelegateModel.modelIndex(cardDelegate.index);
+                                const idx = windowGroup.modelIndex(cardDelegate.index);
                                 groupDialog.tasksModelRef.requestActivate(idx);
                                 groupDialog.visible = false;
                             }
@@ -176,7 +163,7 @@ PlasmaCore.Dialog {
                         TapHandler {
                             acceptedButtons: Qt.MiddleButton
                             onTapped: {
-                                const idx = childDelegateModel.modelIndex(cardDelegate.index);
+                                const idx = windowGroup.modelIndex(cardDelegate.index);
                                 groupDialog.tasksModelRef.requestClose(idx);
                             }
                         }
@@ -210,7 +197,7 @@ PlasmaCore.Dialog {
                                     opacity: (cardHover.hovered || cardCloseBtn.hovered) ? 1.0 : 0.45
                                     Behavior on opacity { NumberAnimation { duration: 100 } }
                                     onClicked: {
-                                        const idx = childDelegateModel.modelIndex(cardDelegate.index);
+                                        const idx = windowGroup.modelIndex(cardDelegate.index);
                                         groupDialog.tasksModelRef.requestClose(idx);
                                     }
                                 }
@@ -262,12 +249,12 @@ PlasmaCore.Dialog {
                 spacing: 2
 
                 Repeater {
-                    model: !groupDialog.usePreviewCards ? childDelegateModel : null
+                    model: !groupDialog.usePreviewCards ? windowGroup.count : 0
 
                     delegate: PlasmaComponents3.ItemDelegate {
                         id: rowDelegate
                         required property int index
-                        required property var model
+                        readonly property var model: windowGroup.windows[index] || ({})
 
                         Layout.fillWidth: true
                         implicitHeight: Math.max(36, rowLayout.implicitHeight + Kirigami.Units.smallSpacing * 2)
@@ -330,7 +317,7 @@ PlasmaCore.Dialog {
                                 opacity: (rowDelegate.hovered || closeBtn.hovered) ? 1.0 : 0.45
                                 Behavior on opacity { NumberAnimation { duration: 100 } }
                                 onClicked: {
-                                    const idx = childDelegateModel.modelIndex(rowDelegate.index);
+                                    const idx = windowGroup.modelIndex(rowDelegate.index);
                                     groupDialog.tasksModelRef.requestClose(idx);
                                 }
                             }
@@ -339,13 +326,13 @@ PlasmaCore.Dialog {
                         TapHandler {
                             acceptedButtons: Qt.MiddleButton
                             onTapped: {
-                                const idx = childDelegateModel.modelIndex(rowDelegate.index);
+                                const idx = windowGroup.modelIndex(rowDelegate.index);
                                 groupDialog.tasksModelRef.requestClose(idx);
                             }
                         }
 
                         onClicked: {
-                            const idx = childDelegateModel.modelIndex(rowDelegate.index);
+                            const idx = windowGroup.modelIndex(rowDelegate.index);
                             groupDialog.tasksModelRef.requestActivate(idx);
                             groupDialog.visible = false;
                         }

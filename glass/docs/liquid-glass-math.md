@@ -1,6 +1,9 @@
 # Liquid Glass — Math, Optics and Shader Specification
 
-Target: Fluctus Glass compositor shader (`glass/src/shaders/glass.frag`).
+Target: the Liquid Glass shader of the Rust engine (`crates/liquidglass/shaders/liquidglass.wgsl`), which
+the Fluctus Glass KWin effect renders with. This spec was first written against the effect's former
+GLSL pass (`glass/src/shaders/glass.frag`, since removed); read its uniform references as the matching
+`LgMaterial` fields in `crates/liquidglass/src/core.rs`.
 Scope: Apple macOS 26 (Tahoe) / iOS 26 "Liquid Glass".
 Researched: 2026-11-28.
 

@@ -15,8 +15,8 @@
 // in-scene liquid glass. Without one, it renders as an overlay meant to sit on top
 // of compositor blur (e.g. KWin blur-behind).
 //
-// The shading itself lives in liquidglass_core.glsl, shared with the Fluctus Glass KWin
-// effect; CMake inlines it at the #include line below before qsb compiles this file.
+// The shading itself lives in liquidglass_core.glsl; CMake inlines it at the #include line
+// below before qsb compiles this file.
 
 #version 440
 

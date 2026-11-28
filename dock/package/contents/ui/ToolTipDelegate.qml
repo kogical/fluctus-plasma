@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQml.Models
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.pipewire as PipeWire
@@ -14,6 +13,8 @@ Item {
 
     property var tasksModelRef
     property var modelIndex
+    /// Top-level TasksModel row (used to read a group's windows fresh).
+    property int taskIndex: -1
     property string displayTitle: ""
     property string appName: ""
     property var decorationIcon
@@ -27,7 +28,8 @@ Item {
     readonly property string primaryWinId: (winIdList && winIdList.length > 0) ? String(winIdList[0]) : ""
     readonly property bool isGroup: isGroupParent && childCount > 1
     readonly property bool canShowSingleThumbnail: showPreview && isWindow && !isGroup && primaryWinId.length > 0
-    readonly property bool canShowGroupCards: isGroup && Boolean(tasksModelRef) && Boolean(modelIndex)
+    readonly property bool canShowGroupCards: isGroup && Boolean(tasksModelRef) && taskIndex >= 0
+    readonly property bool showGroupCards: canShowGroupCards && showPreview && childCount <= 4
 
     function cleanWindowTitle(rawTitle) {
         const title = String(rawTitle || "").trim();
@@ -50,10 +52,11 @@ Item {
         id: mprisModel
     }
 
-    DelegateModel {
+    TaskGroupWindows {
         id: groupChildModel
-        model: toolTipRoot.canShowGroupCards ? toolTipRoot.tasksModelRef : null
-        rootIndex: toolTipRoot.canShowGroupCards ? toolTipRoot.modelIndex : null
+        tasksModel: toolTipRoot.tasksModelRef
+        row: toolTipRoot.taskIndex
+        enabled: toolTipRoot.canShowGroupCards
     }
 
     readonly property int matchedPlayerIndex: {
@@ -79,6 +82,12 @@ Item {
 
     implicitWidth: Math.max(210, Math.min(toolTipRoot.canShowGroupCards ? 960 : 310, mainColumn.implicitWidth + Kirigami.Units.largeSpacing * 2))
     implicitHeight: mainColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
+    // The tooltip dialog follows these (not the implicit size) after it first appears, so
+    // pinning them lets it grow when the window previews of a group arrive.
+    Layout.minimumWidth: implicitWidth
+    Layout.maximumWidth: implicitWidth
+    Layout.minimumHeight: implicitHeight
+    Layout.maximumHeight: implicitHeight
 
     ColumnLayout {
         id: mainColumn
@@ -140,19 +149,17 @@ Item {
 
         // Grouped windows: side-by-side live PipeWire preview cards (<= 4) or compact rows
         RowLayout {
-            visible: toolTipRoot.canShowGroupCards && toolTipRoot.showPreview && groupChildModel.count <= 4
+            visible: toolTipRoot.showGroupCards
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
             Repeater {
-                model: (toolTipRoot.canShowGroupCards && toolTipRoot.showPreview && groupChildModel.count <= 4)
-                    ? groupChildModel
-                    : null
+                model: toolTipRoot.showGroupCards ? groupChildModel.count : 0
 
                 delegate: Rectangle {
                     id: groupCard
                     required property int index
-                    required property var model
+                    readonly property var model: groupChildModel.windows[index] || ({})
 
                     readonly property string winUuid: (model.WinIdList && model.WinIdList.length > 0)
                         ? String(model.WinIdList[0])
@@ -269,19 +276,17 @@ Item {
 
         // Grouped windows fallback list (when previews disabled or > 4 windows)
         ColumnLayout {
-            visible: toolTipRoot.canShowGroupCards && (!toolTipRoot.showPreview || groupChildModel.count > 4)
+            visible: toolTipRoot.canShowGroupCards && !toolTipRoot.showGroupCards
             Layout.fillWidth: true
             spacing: 2
 
             Repeater {
-                model: (toolTipRoot.canShowGroupCards && (!toolTipRoot.showPreview || groupChildModel.count > 4))
-                    ? groupChildModel
-                    : null
+                model: (toolTipRoot.canShowGroupCards && !toolTipRoot.showGroupCards) ? groupChildModel.count : 0
 
                 delegate: PlasmaComponents3.ItemDelegate {
                     id: groupRow
                     required property int index
-                    required property var model
+                    readonly property var model: groupChildModel.windows[index] || ({})
 
                     Layout.fillWidth: true
                     highlighted: Boolean(model.IsActive)

@@ -33,23 +33,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_NESTED = REPO_ROOT / "glass/tools/run-nested.sh"
 HARNESS_QML = REPO_ROOT / "glass/tools/ParityHarness.qml"
 
-# Default local paths for cached Apple references (can be overridden by CLI args)
-DEFAULT_REF = Path(
-    "/home/natix/.t3/userdata/attachments/"
-    "0c96d757-1b36-4c10-ad28-bbe2f7f357b8-e42b4528-b8ab-40af-8619-05fb7e33f998.png"
+# Apple reference images are not redistributable, so they live outside the repository. Put them
+# in $FLUCTUS_PARITY_REFS (default ~/.cache/fluctus/parity-refs) or pass the paths explicitly.
+REFS_DIR = Path(
+    os.environ.get("FLUCTUS_PARITY_REFS")
+    or Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "fluctus/parity-refs"
 )
-DEFAULT_GT = Path(
-    "/tmp/claude-1000/-home-natix-Develop-github-fluctus-plasma/"
-    "320ef985-2daf-4089-8e09-fa9ed3688e83/scratchpad/analysis/gt_wallpaper.png"
-)
-DEFAULT_CC_REF = Path(
-    "/tmp/claude-1000/-home-natix-Develop-github-fluctus-plasma/"
-    "320ef985-2daf-4089-8e09-fa9ed3688e83/scratchpad/refs/tahoe_cc.jpg"
-)
-DEFAULT_WP = Path(
-    "/tmp/claude-1000/-home-natix-Develop-github-fluctus-plasma/"
-    "320ef985-2daf-4089-8e09-fa9ed3688e83/scratchpad/wp/tahoe-light.png"
-)
+DEFAULT_REF = REFS_DIR / "music-card.png"           # Apple Music card on macOS 26 Tahoe Light
+DEFAULT_GT = REFS_DIR / "music-card-wallpaper.png"  # the same wallpaper crop without the card
+DEFAULT_CC_REF = REFS_DIR / "control-center.jpg"    # Apple Newsroom Control Center capture
+DEFAULT_WP = REFS_DIR / "tahoe-light.png"           # full-resolution Tahoe Light wallpaper
 
 
 def sd_round_rect(

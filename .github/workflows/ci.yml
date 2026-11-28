@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-test-lint:
-    name: Build, Test (Release + ASan/UBSan) & clang-tidy
+  ci:
+    name: just ci (Rust + C++ Release + ASan/UBSan + lint)
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -21,105 +21,65 @@ jobs:
     env:
       CC: clang
       CXX: clang++
+      CARGO_HOME: ${{ github.workspace }}/.cargo-home
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
       CCACHE_COMPRESS: "true"
       CCACHE_COMPRESSLEVEL: "6"
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_ctime,include_file_mtime
+      ASAN_OPTIONS: detect_leaks=0
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Pacman packages
+      - name: Cache pacman packages
         uses: actions/cache@v4
         with:
           path: /var/cache/pacman/pkg
           key: arch-pacman-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: |
-            arch-pacman-
+          restore-keys: arch-pacman-
 
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: arch-ccache-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json') }}-${{ github.sha }}
-          restore-keys: |
-            arch-ccache-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json') }}-
-            arch-ccache-
-
-      - name: Cache Ninja build trees
+      - name: Cache ccache, CMake trees and Cargo
         uses: actions/cache@v4
         with:
           path: |
+            .ccache
+            .cargo-home/registry
+            .cargo-home/git
+            target
             build/release
             build/debug-asan-ubsan
-          key: arch-build-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json') }}-${{ github.sha }}
+          key: arch-build-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'Cargo.lock') }}-${{ github.sha }}
           restore-keys: |
-            arch-build-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json') }}-
+            arch-build-${{ hashFiles('**/CMakeLists.txt', 'CMakePresets.json', 'Cargo.lock') }}-
+            arch-build-
 
-      - name: Install KDE Plasma 6, Qt 6, and build toolchain
+      - name: Install KDE Plasma 6, Qt 6 and the toolchain
         run: |
           mkdir -p /var/cache/pacman/pkg
           pacman -Syu --noconfirm --needed \
-            cmake \
-            ninja \
-            ccache \
-            lld \
-            clang \
-            rust \
-            extra-cmake-modules \
-            qt6-base \
-            qt6-declarative \
-            qt6-shadertools \
-            kconfig \
-            kcoreaddons \
-            ki18n \
-            kwindowsystem \
-            kglobalaccel \
-            kservice \
-            kio \
-            libplasma \
-            plasma-workspace
-
-      - name: Test Rust liquidglass crate (core + naga codegen + gl/ffi check)
-        run: |
-          cargo test --manifest-path crates/liquidglass/Cargo.toml
-          cargo check --manifest-path crates/liquidglass/Cargo.toml --no-default-features --features "gl,ffi"
+            just cmake ninja ccache lld clang rust \
+            extra-cmake-modules qt6-base qt6-declarative qt6-shadertools \
+            kconfig kcoreaddons kguiaddons ki18n kwindowsystem kglobalaccel kservice kio kcmutils \
+            libplasma plasma-workspace kwin kdecoration
 
       - name: Zero ccache stats
         run: ccache -z
 
-      - name: Configure & build (Release)
-        run: |
-          cmake --preset release -DFLUCTUS_REQUIRE_ECM=ON
-          cmake --build --preset release --parallel "$(nproc)"
-
-      - name: Run unit tests (Release)
-        run: ctest --preset release --output-on-failure
-
-      - name: Configure & build (Debug + ASan/UBSan)
-        run: |
-          cmake --preset debug-asan-ubsan -DFLUCTUS_REQUIRE_ECM=ON
-          cmake --build --preset debug-asan-ubsan --parallel "$(nproc)"
-
-      - name: Run unit tests (Debug + ASan/UBSan)
-        env:
-          ASAN_OPTIONS: detect_leaks=0
-        run: ctest --preset debug-asan-ubsan --output-on-failure
-
-      - name: Run clang-tidy on C++23 sources
-        run: |
-          find dock/src libs/glassclient -name '*.cpp' -print0 | xargs -0 -n1 -P "$(nproc)" \
-            clang-tidy -p build/release --quiet
+      - name: just ci
+        run: just ci
 
       - name: Print ccache statistics
         if: always()
         run: ccache -s
 
-      - name: Upload compiled applet artifact
+      - name: Upload compiled plugins
         uses: actions/upload-artifact@v4
         with:
-          name: fluctus-applet-linux-x86_64
-          path: build/release/bin/plasma/applets/com.kogical.fluctus.dock.so
+          name: fluctus-plugins-linux-x86_64
+          path: |
+            build/release/bin/plasma/applets/com.kogical.fluctus.dock.so
+            build/release/bin/fluctusglass.so
+            build/release/bin/kwin_fluctusglass_config.so
           retention-days: 14

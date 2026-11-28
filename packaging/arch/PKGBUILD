@@ -1,22 +1,28 @@
-# Maintainer: Kogical <https://github.com/kogical/fluctus-plasma>
-pkgname=fluctus-plasma-git
-pkgver=0.1.0.r0.g0000000
+# Maintainer: Kogical <https://github.com/kogical/fluctus>
+pkgname=fluctus-git
+_repo=fluctus
+pkgver=0.2.0.r0.g0000000
 pkgrel=1
-pkgdesc="macOS-style animated task manager dock for KDE Plasma 6.8+"
+pkgdesc="Fluid dock and real Liquid Glass for KDE Plasma 6.8+ (Fluctus Dock + Fluctus Glass)"
 arch=('x86_64' 'aarch64')
-url="https://github.com/kogical/fluctus-plasma"
-license=('MIT')
+url="https://github.com/kogical/fluctus"
+license=('Apache-2.0' 'GPL-3.0-or-later')
 depends=(
     'qt6-base'
     'qt6-declarative'
     'kcoreaddons'
+    'kconfig'
+    'kguiaddons'
     'ki18n'
     'kwindowsystem'
     'kglobalaccel'
     'kservice'
     'kio'
+    'kcmutils'
     'libplasma'
     'plasma-workspace'
+    'kwin'
+    'kdecoration'
 )
 optdepends=(
     'plasma-pa: clickable audio mute indicator badges on dock icons'
@@ -26,36 +32,48 @@ makedepends=(
     'git'
     'cmake'
     'ninja'
+    'rust'
     'extra-cmake-modules'
+    'qt6-shadertools'
 )
-provides=('fluctus-plasma')
-conflicts=('fluctus-plasma')
+provides=('fluctus' 'fluctus-plasma')
+conflicts=('fluctus' 'fluctus-plasma' 'fluctus-plasma-git')
+replaces=('fluctus-plasma-git')
 source=("git+${url}.git")
 sha256sums=('SKIP')
 
 pkgver() {
-    cd "$srcdir/fluctus-plasma"
-    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    cd "$srcdir/$_repo"
+    printf "0.2.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$srcdir/$_repo"
+    export CARGO_HOME="$srcdir/cargo-home"
+    cargo fetch --locked
 }
 
 build() {
-    cd "$srcdir/fluctus-plasma"
+    cd "$srcdir/$_repo"
+    export CARGO_HOME="$srcdir/cargo-home"
     cmake -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
         -DFLUCTUS_REQUIRE_ECM=ON \
-        -DFLUCTUS_BUILD_TESTS=ON
+        -DFLUCTUS_BUILD_TESTS=ON \
+        -DFLUCTUS_CARGO_TARGET_DIR="$srcdir/cargo-target"
     cmake --build build --parallel "$(nproc)"
 }
 
 check() {
-    cd "$srcdir/fluctus-plasma"
-    ctest --test-dir build --output-on-failure
+    cd "$srcdir/$_repo"
+    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 }
 
 package() {
-    cd "$srcdir/fluctus-plasma"
+    cd "$srcdir/$_repo"
     DESTDIR="$pkgdir" cmake --install build
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 glass/LICENSE "$pkgdir/usr/share/licenses/$pkgname/glass/LICENSE"
 }

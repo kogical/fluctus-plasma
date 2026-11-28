@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Kogical
+# SPDX-License-Identifier: Apache-2.0
+#
+# liquidglass, the Rust rendering engine. Run `just` here, or `just liquidglass <recipe>` from
+# the repository root. Builds share the workspace's target/ directory with CMake.
+
+import '../../tools/common.just'
+
+# List the engine recipes
+[private]
+default:
+    @just --list
+
+# Run the unit tests (CPU core and shader code generation)
+test:
+    cargo test --locked
+
+# Also run the headless GPU tests (needs a working Vulkan or OpenGL driver)
+test-gpu:
+    cargo test --locked --features wgpu
+
+# Type-check the OpenGL backend and C ABI that the KWin effect links
+check:
+    cargo check --locked --no-default-features --features gl,ffi
+
+# Lint with clippy
+lint:
+    cargo clippy --locked --no-default-features --features gl,ffi
+
+# Regenerate the C header include/liquidglass.h
+header:
+    cargo build --locked --no-default-features --features ffi
+
+# Build and open the API documentation
+doc:
+    cargo doc --locked --no-deps --features gl,ffi,wgpu --open

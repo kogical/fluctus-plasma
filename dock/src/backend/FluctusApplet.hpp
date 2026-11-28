@@ -44,7 +44,7 @@ class FluctusApplet final : public Plasma::Applet {
     /// Detection order: Fluctus Glass (our KWin effect), then the third-party kwin-effects-glass.
     /// 0 = neither installed, 1 = installed but not running, 2 = running.
     Q_PROPERTY(int glassEffectState READ glassEffectState NOTIFY glassEffectStateChanged)
-    /// Which provider glassEffectState describes: "fluctus", "glass" (kwin-effects-glass) or "".
+    /// Which provider glassEffectState describes: "fluctusglass", "glass" (kwin-effects-glass) or "".
     Q_PROPERTY(QString glassProvider READ glassProvider NOTIFY glassEffectStateChanged)
     /// Linux distribution family from /etc/os-release ("arch", "gentoo" or "other"),
     /// used to show the right install instructions.
