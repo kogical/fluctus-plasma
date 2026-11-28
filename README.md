@@ -21,7 +21,9 @@
 - **Fluid Dock Magnification & Bounce** — Smooth hover magnification wave (Raised Cosine, Quintic Smootherstep, or Gaussian curves) and gravity bounce for launching or attention-demanding apps, with 0% idle CPU usage when at rest.
 - **Adapts to Your Plasma Panel** — Automatically scales icons and zoom headroom to fit the surrounding KDE Plasma panel on any screen edge (Bottom, Top, Left, or Right), preventing Wayland clipping and overflowing.
 - **Panel Colorizer & Theme Friendly** — Ships in **Default (Panel Managed)** mode out of the box so your Plasma panel theme or tools like **Panel Colorizer** can style the background and blur natively.
-- **Custom Glass & Blur Materials** — Switch to **Custom Glass Pill** for **Liquid Glass**, **Frosted Glass**, **Acrylic**, **Clear Blur**, or **Solid** surfaces with customizable tint, opacity, corner radius, borders, and padding — or pick **Plasma Theme Surface** / **Transparent**.
+- **Custom Glass & Blur Materials** — Switch to **Glass pill** for **Liquid Glass** (lens bezel, angled rim light; needs the [Glass KWin effect](https://github.com/4v3ngR/kwin-effects-glass) for real refraction, e.g. `yay -S kwin-effects-glass-git` on Arch), **Frosted Glass**, **Acrylic** (with grain), **Clear Glass**, or **Solid** surfaces with tint (theme / custom / accent), opacity, corner radius, outline style (single, dual hairline, accent glow), drop shadow and rim highlight — or pick **Plasma theme surface** (now blurred) / **Transparent**. Rendered by the reusable [`Kogical.LiquidGlass`](modules/liquidglass/README.md) Qt Quick module.
+- **Presets** — One-click styles (**macOS Tahoe**, **macOS Sequoia**, **Glass Capsule**, **Plasma Native**, **Midnight Solid**, **Neon Aurora**, **Paper**, **Floating Icons**) with live previews; choose which parts to apply (look, indicators, spacing, panel background, physics).
+- **Hide Plasma panel background** — Remove the panel's own frame, blur and shadow so only the dock is visible; restored automatically when turned off or when the widget is removed.
 - **Full KDE Task Manager Integration**:
   - **Pin & Unpin** apps via the native KDE right-click context menu (including per-activity pinning), by dragging apps onto the dock, or by dragging pinned icons off the dock.
   - **Smooth Spring Drag Reordering** with a live insertion guide, plus file drop-to-open and hover-to-raise on minimized windows/groups.
@@ -87,9 +89,11 @@ just uninstall
 1. Right-click your KDE Plasma panel → **Enter Edit Mode** → **Add Widgets…**
 2. Search for **Fluctus Dock** and drag it onto your panel (or add the bundled **Fluctus Dock Panel** layout template via *Add Panel*).
 3. Right-click the dock → **Configure Fluctus Dock…** to customize:
-   - **Appearance**: Panel auto-scaling, icon size & spacing, **Default (Panel / Panel Colorizer)** vs. **Custom Glass Pill** (**Liquid Glass**, **Frosted**, **Acrylic**, **Clear Blur**), and icon reflections.
-   - **Physics & Animation**: Magnification zoom, wave radius, falloff curve, and bounce height.
-   - **Behavior**: Screen/desktop/activity filters, tooltips & live previews, click actions, and launcher ordering.
+   - **Presets**: Ready-made styles with live previews. Tick which parts to apply (look, indicators, spacing, panel background, magnification).
+   - **Appearance**: Live preview, the **Hide the panel behind the dock** switch, background (None, Glass, Plasma theme, Icons only), material, color, shape and edges, and running-app indicators.
+   - **Size & Spacing**: A panel height calculator (Small, Medium, Large or a custom icon size, with a one-click **Use this height**), icon size and spacing, and padding.
+   - **Magnification**: Magnified size (shown in pixels), wave width and shape, and launch bounce.
+   - **Behavior**: Which windows appear, clicking, pinned apps, hover tooltips and previews, and badges and alerts.
 
 > **Using Panel Colorizer?** Keep **Background mode** set to **Default (Panel / Panel Colorizer)** — Fluctus will not draw its own pill or override KWin's panel blur.
 

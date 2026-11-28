@@ -1,8 +1,11 @@
 #include "quick/BlurRegionController.hpp"
 
 #include <KWindowEffects>
+#include <QMetaMethod>
 #include <QPainterPath>
 #include <QPolygon>
+#include <QQuickItem>
+#include <QQuickWindow>
 
 #include <algorithm>
 #include <cmath>
@@ -10,7 +13,11 @@
 namespace fluctus::quick {
 
 BlurRegionController::BlurRegionController(QObject *parent)
-    : QObject(parent) {}
+    : QObject(parent) {
+    m_applyTimer.setSingleShot(true);
+    m_applyTimer.setInterval(0);
+    connect(&m_applyTimer, &QTimer::timeout, this, &BlurRegionController::applyNow);
+}
 
 BlurRegionController::~BlurRegionController() {
     clearBlurOnWindow(m_window);
@@ -20,6 +27,12 @@ void BlurRegionController::setWindow(QWindow *window) {
     if (m_window == window) {
         return;
     }
+
+    for (const auto &connection : std::as_const(m_panelConnections)) {
+        disconnect(connection);
+    }
+    m_panelConnections.clear();
+    m_panelRoot = nullptr;
 
     if (m_window) {
         disconnect(m_window, nullptr, this, nullptr);
@@ -31,9 +44,38 @@ void BlurRegionController::setWindow(QWindow *window) {
     if (m_window) {
         connect(m_window, &QWindow::widthChanged, this, &BlurRegionController::reapply);
         connect(m_window, &QWindow::heightChanged, this, &BlurRegionController::reapply);
+        connect(m_window, &QWindow::xChanged, this, &BlurRegionController::reapply);
+        connect(m_window, &QWindow::yChanged, this, &BlurRegionController::reapply);
         connect(m_window, &QWindow::screenChanged, this, &BlurRegionController::reapply);
         connect(m_window, &QWindow::visibleChanged, this, &BlurRegionController::reapply);
+        watchPanelRoot();
         reapply();
+    }
+}
+
+void BlurRegionController::watchPanelRoot() {
+    // PanelView (plasma-workspace) re-runs updateMask() — which unconditionally rewrites the
+    // window's blur + contrast — whenever its root Panel.qml item changes panelMask or animates
+    // floatingness. Listen to the same signals so our pill blur is re-applied afterwards.
+    auto *quickWindow = qobject_cast<QQuickWindow *>(m_window.data());
+    if (!quickWindow || !quickWindow->contentItem()) {
+        return;
+    }
+    const QMetaMethod slot = metaObject()->method(metaObject()->indexOfSlot("reapply()"));
+    const auto children = quickWindow->contentItem()->childItems();
+    for (QQuickItem *child : children) {
+        const QMetaObject *mo = child->metaObject();
+        if (mo->indexOfProperty("panelMask") < 0) {
+            continue;
+        }
+        m_panelRoot = child;
+        for (const char *signature : {"panelMaskChanged()", "floatingnessChanged()", "panelOpacityChanged()"}) {
+            const int idx = mo->indexOfSignal(signature);
+            if (idx >= 0) {
+                m_panelConnections.append(connect(child, mo->method(idx), this, slot));
+            }
+        }
+        break;
     }
 }
 
@@ -42,15 +84,6 @@ void BlurRegionController::setEnabled(bool enabled) {
         return;
     }
     m_enabled = enabled;
-    reapply();
-}
-
-void BlurRegionController::setBlurStyle(int style) {
-    const int clamped = std::clamp(style, 0, 4);
-    if (m_blurStyle == clamped) {
-        return;
-    }
-    m_blurStyle = clamped;
     reapply();
 }
 
@@ -68,6 +101,22 @@ void BlurRegionController::setWindowPillRect(const QRectF &rectInWindow) {
         return;
     }
     m_windowPillRect = rectInWindow;
+    reapply();
+}
+
+void BlurRegionController::setCustomRegion(const QRegion &regionInWindow) {
+    if (m_customRegion == regionInWindow) {
+        return;
+    }
+    m_customRegion = regionInWindow;
+    reapply();
+}
+
+void BlurRegionController::setContrast(const BlurContrast &contrast) {
+    if (m_contrast == contrast) {
+        return;
+    }
+    m_contrast = contrast;
     reapply();
 }
 
@@ -91,12 +140,48 @@ QRegion BlurRegionController::buildRoundedRegion(const QRectF &rect, qreal corne
     return QRegion(polygon);
 }
 
+QRegion BlurRegionController::currentRegion() const {
+    if (!m_customRegion.isEmpty()) {
+        return m_customRegion;
+    }
+    if (m_windowPillRect.isEmpty()) {
+        return {};
+    }
+    return buildRoundedRegion(m_windowPillRect, m_cornerRadius);
+}
+
+QRegion BlurRegionController::panelBackgroundRegion() const {
+    if (!m_window || !m_panelRoot) {
+        return {};
+    }
+    // PanelView exposes Plasma::Types::BackgroundHints; 0 == NoBackground.
+    const QVariant hints = m_window->property("backgroundHints");
+    if (!hints.isValid() || hints.toInt() == 0) {
+        return {};
+    }
+    const QVariant maskProperty = m_panelRoot->property("panelMask");
+    if (maskProperty.typeId() != QMetaType::QRegion) {
+        return {};
+    }
+    auto mask = maskProperty.value<QRegion>();
+    const QPoint offset = m_panelRoot->property("floatingTranslucentItemOffset").toPoint();
+    mask.translate(offset);
+    return mask;
+}
+
 void BlurRegionController::clearBlurOnWindow(QWindow *window) {
     if (!window) {
         return;
     }
     if (m_appliedBlur) {
-        KWindowEffects::enableBlurBehind(window, false);
+        // Hand the window back to the state PanelView would have set: blur only behind a
+        // visible panel background, never a blanket disable that strips the panel's blur.
+        const QRegion panelRegion = window == m_window ? panelBackgroundRegion() : QRegion();
+        if (panelRegion.isEmpty()) {
+            KWindowEffects::enableBlurBehind(window, false);
+        } else {
+            KWindowEffects::enableBlurBehind(window, true, panelRegion);
+        }
         m_appliedBlur = false;
     }
     if (m_appliedContrast) {
@@ -106,46 +191,46 @@ void BlurRegionController::clearBlurOnWindow(QWindow *window) {
 }
 
 void BlurRegionController::reapply() {
+    if (!m_applyTimer.isActive()) {
+        m_applyTimer.start();
+    }
+}
+
+void BlurRegionController::applyNow() {
+    m_applyTimer.stop();
     if (!m_window || !m_window->isVisible()) {
         return;
     }
 
-    if (!m_enabled || m_blurStyle == 4 || m_windowPillRect.isEmpty()) {
+    if (!m_enabled) {
         clearBlurOnWindow(m_window);
         return;
     }
 
-    const QRegion region = buildRoundedRegion(m_windowPillRect, m_cornerRadius);
+    const QRegion region = currentRegion();
     if (region.isEmpty()) {
         clearBlurOnWindow(m_window);
         return;
     }
 
-    KWindowEffects::enableBlurBehind(m_window, true, region);
+    // PanelView::updateMask() just overwrote the window blur with its own mask; keep the
+    // visible panel background blurred by blurring the union.
+    KWindowEffects::enableBlurBehind(m_window, true, region.united(panelBackgroundRegion()));
     m_appliedBlur = true;
 
-    // Apply compositor background contrast presets per blur style:
-    // 0 = Frosted Glass, 1 = Liquid Glass (vibrant/refractive), 2 = Acrylic, 3 = Clear Blur (blur only)
-    switch (m_blurStyle) {
-    case 0:
-        KWindowEffects::enableBackgroundContrast(m_window, true, 1.15, 1.05, 1.25, region);
+    if (m_contrast.enabled) {
+        KWindowEffects::enableBackgroundContrast(
+            m_window,
+            true,
+            m_contrast.contrast,
+            m_contrast.intensity,
+            m_contrast.saturation,
+            region
+        );
         m_appliedContrast = true;
-        break;
-    case 1:
-        KWindowEffects::enableBackgroundContrast(m_window, true, 1.38, 1.18, 1.85, region);
-        m_appliedContrast = true;
-        break;
-    case 2:
-        KWindowEffects::enableBackgroundContrast(m_window, true, 1.08, 0.94, 1.12, region);
-        m_appliedContrast = true;
-        break;
-    case 3:
-    default:
-        if (m_appliedContrast) {
-            KWindowEffects::enableBackgroundContrast(m_window, false);
-            m_appliedContrast = false;
-        }
-        break;
+    } else if (m_appliedContrast) {
+        KWindowEffects::enableBackgroundContrast(m_window, false);
+        m_appliedContrast = false;
     }
 }
 

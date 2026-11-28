@@ -184,6 +184,14 @@ set(FLUCTUS_QML_SOURCES
     package/contents/ui/ConfigAppearance.qml
     package/contents/ui/ConfigPhysics.qml
     package/contents/ui/ConfigBehavior.qml
+    package/contents/ui/ConfigPresets.qml
+    package/contents/ui/ConfigSize.qml
+    package/contents/ui/ConfigSlider.qml
+    package/contents/ui/ConfigHint.qml
+    package/contents/ui/GlassEffectNotice.qml
+    package/contents/ui/DockBackground.qml
+    package/contents/ui/DockPreview.qml
+    package/contents/ui/Presets.js
     package/contents/config/config.qml
 )
 
@@ -200,11 +208,23 @@ set_source_files_properties(package/contents/ui/GroupDialog.qml PROPERTIES QT_RE
 set_source_files_properties(package/contents/ui/ConfigAppearance.qml PROPERTIES QT_RESOURCE_ALIAS ConfigAppearance.qml)
 set_source_files_properties(package/contents/ui/ConfigPhysics.qml PROPERTIES QT_RESOURCE_ALIAS ConfigPhysics.qml)
 set_source_files_properties(package/contents/ui/ConfigBehavior.qml PROPERTIES QT_RESOURCE_ALIAS ConfigBehavior.qml)
+set_source_files_properties(package/contents/ui/ConfigPresets.qml PROPERTIES QT_RESOURCE_ALIAS ConfigPresets.qml)
+set_source_files_properties(package/contents/ui/ConfigSize.qml PROPERTIES QT_RESOURCE_ALIAS ConfigSize.qml)
+set_source_files_properties(package/contents/ui/ConfigSlider.qml PROPERTIES QT_RESOURCE_ALIAS ConfigSlider.qml)
+set_source_files_properties(package/contents/ui/ConfigHint.qml PROPERTIES QT_RESOURCE_ALIAS ConfigHint.qml)
+set_source_files_properties(package/contents/ui/GlassEffectNotice.qml PROPERTIES QT_RESOURCE_ALIAS GlassEffectNotice.qml)
+set_source_files_properties(package/contents/ui/DockBackground.qml PROPERTIES QT_RESOURCE_ALIAS DockBackground.qml)
+set_source_files_properties(package/contents/ui/DockPreview.qml PROPERTIES QT_RESOURCE_ALIAS DockPreview.qml)
+set_source_files_properties(package/contents/ui/Presets.js PROPERTIES QT_RESOURCE_ALIAS Presets.js)
 set_source_files_properties(package/contents/config/config.qml PROPERTIES QT_RESOURCE_ALIAS config.qml)
 set_source_files_properties(package/contents/config/main.xml PROPERTIES QT_RESOURCE_ALIAS main.xml)
 
 if(ECM_FOUND)
+    # Reusable glass material module (QML + shader), linked statically into the applet.
+    add_subdirectory(modules/liquidglass)
+
     find_package(KF6CoreAddons 6.0 REQUIRED)
+    find_package(KF6Config 6.0 REQUIRED)
     find_package(KF6GuiAddons 6.0 REQUIRED)
     find_package(KF6I18n 6.0 REQUIRED)
     find_package(KF6GlobalAccel 6.0 REQUIRED)
@@ -250,7 +270,9 @@ if(ECM_FOUND)
         Qt6::DBus
         Plasma::Plasma
         PW::LibTaskManager
+        kogical_liquidglass
         KF6::CoreAddons
+        KF6::ConfigCore
         KF6::GuiAddons
         KF6::I18n
         KF6::WindowSystem

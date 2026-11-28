@@ -1,16 +1,24 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
-import org.kde.ksvg as KSvg
 import org.kde.taskmanager as TaskManager
 
 PlasmoidItem {
     id: root
 
     Plasmoid.constraintHints: Plasmoid.CanFillArea
+    // Removes the hosting panel's own frame/blur/shadow (restored when disabled or removed).
+    // FluctusApplet-specific properties are not visible to the statically typed attached
+    // Plasmoid object, so bind through an explicit Binding.
+    Binding {
+        target: Plasmoid
+        property: "hidePanelBackground"
+        value: Plasmoid.configuration.hidePanelBackground
+    }
     preferredRepresentation: fullRepresentation
 
     readonly property bool isVertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
@@ -31,8 +39,11 @@ PlasmoidItem {
     readonly property int backgroundMode: Plasmoid.configuration.backgroundMode
     readonly property int blurStyle: Plasmoid.configuration.blurStyle
     readonly property bool isCustomGlassPill: backgroundMode === 1
-    readonly property bool isLiquidGlass: isCustomGlassPill && blurStyle === 1
     readonly property bool isPlasmaThemePill: backgroundMode === 2
+    // Liquid Glass relies on the Glass KWin effect for real refraction. Without it the dock uses
+    // Frosted instead, and the settings explain how to get the effect.
+    readonly property bool liquidGlassAvailable: Plasmoid.glassEffectState === 2
+    readonly property int effectiveMaterial: blurStyle === 1 && !liquidGlassAvailable ? 0 : blurStyle
 
     property int smartLauncherRevision: 0
     property int activeDropIndex: -1
@@ -150,10 +161,6 @@ PlasmoidItem {
         }
     }
 
-    onInEditModeChanged: {
-        dockLayout.reapplyBlur();
-    }
-
     fullRepresentation: Item {
         id: container
 
@@ -165,81 +172,55 @@ PlasmoidItem {
         Layout.minimumWidth: root.isVertical ? 24 : Math.min(dockLayout.implicitWidth, 64)
         Layout.minimumHeight: root.isVertical ? Math.min(dockLayout.implicitHeight, 64) : 24
 
-        // Mode 2: Native Plasma Theme Surface (KSvg FrameSvgItem)
-        KSvg.FrameSvgItem {
-            id: plasmaThemePill
-            imagePath: "widgets/panel-background"
-            x: dockLayout.pillRect.x
-            y: dockLayout.pillRect.y
-            width: dockLayout.pillRect.width
-            height: dockLayout.pillRect.height
-            visible: root.isPlasmaThemePill && dockLayout.count > 0 && width > 0 && height > 0
+        // Report panel geometry so the settings can recommend / set the optimal panel height.
+        Binding {
+            target: Plasmoid
+            property: "dockCrossExtent"
+            value: root.isVertical ? container.width : container.height
+        }
+        Component.onCompleted: Plasmoid.setPanelWindow(container.Window.window)
+        Window.onWindowChanged: Plasmoid.setPanelWindow(container.Window.window)
+
+        // PanelView rewrites the window blur when its background hints or edit mode change.
+        Connections {
+            target: Plasmoid
+            function onPanelBackgroundStateChanged() {
+                dockLayout.reapplyBlur();
+            }
+        }
+        Connections {
+            target: root
+            function onInEditModeChanged() {
+                dockLayout.reapplyBlur();
+            }
         }
 
-        // Mode 1: Customizable Glass / Liquid Glass / Acrylic / Solid Pill
-        Rectangle {
-            id: dockPill
+        // Dock surface (Glass pill / Plasma theme surface). Shared with the settings previews.
+        DockBackground {
+            id: dockSurface
             x: dockLayout.pillRect.x
             y: dockLayout.pillRect.y
             width: dockLayout.pillRect.width
             height: dockLayout.pillRect.height
-            visible: root.isCustomGlassPill && dockLayout.count > 0 && width > 0 && height > 0
-            radius: Math.min(Plasmoid.configuration.pillCornerRadius, Math.min(width, height) * 0.5)
-            clip: true
-
-            readonly property color baseFill: Plasmoid.configuration.pillColorMode === 1
-                ? Plasmoid.configuration.pillCustomColor
-                : Kirigami.Theme.backgroundColor
-
-            readonly property real effectiveOpacity: {
-                const raw = Plasmoid.configuration.pillOpacity;
-                if (root.isLiquidGlass) {
-                    return Math.min(raw, 0.42);
-                }
-                if (root.blurStyle === 3) {
-                    return Math.min(raw, 0.28);
-                }
-                return raw;
-            }
-
-            color: Qt.rgba(baseFill.r, baseFill.g, baseFill.b, effectiveOpacity)
-            border.width: Plasmoid.configuration.pillBorderWidth
-            border.color: root.isLiquidGlass
-                ? Qt.rgba(1.0, 1.0, 1.0, Math.min(1.0, Plasmoid.configuration.pillBorderOpacity + 0.16))
-                : Qt.rgba(
-                    Kirigami.Theme.textColor.r,
-                    Kirigami.Theme.textColor.g,
-                    Kirigami.Theme.textColor.b,
-                    Plasmoid.configuration.pillBorderOpacity
-                )
-
-            // Liquid Glass specular top-edge sheen & soft inner refraction gradient
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: dockPill.border.width
-                radius: Math.max(0, dockPill.radius - dockPill.border.width)
-                visible: root.isLiquidGlass
-                gradient: Gradient {
-                    orientation: root.isVertical ? Gradient.Horizontal : Gradient.Vertical
-                    GradientStop { position: 0.0; color: Qt.rgba(1.0, 1.0, 1.0, 0.28) }
-                    GradientStop { position: 0.22; color: Qt.rgba(1.0, 1.0, 1.0, 0.08) }
-                    GradientStop { position: 0.78; color: Qt.rgba(1.0, 1.0, 1.0, 0.02) }
-                    GradientStop { position: 1.0; color: Qt.rgba(1.0, 1.0, 1.0, 0.14) }
-                }
-            }
-
-            // Crisp specular top highlight hairline for Liquid Glass & Frosted Glass
-            Rectangle {
-                visible: root.isLiquidGlass || root.blurStyle === 0
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.leftMargin: Math.max(4, dockPill.radius * 0.5)
-                anchors.rightMargin: Math.max(4, dockPill.radius * 0.5)
-                anchors.topMargin: 1
-                height: 1
-                color: Qt.rgba(1.0, 1.0, 1.0, root.isLiquidGlass ? 0.45 : 0.18)
-            }
+            visible: (root.isCustomGlassPill || root.isPlasmaThemePill) && dockLayout.count > 0 && width > 0 && height > 0
+            backgroundMode: root.backgroundMode
+            materialIndex: root.effectiveMaterial
+            colorMode: Plasmoid.configuration.pillColorMode
+            customColor: Plasmoid.configuration.pillCustomColor
+            tintOpacity: Plasmoid.configuration.pillOpacity
+            cornerRadius: Plasmoid.configuration.pillCornerRadius
+            borderStyle: Plasmoid.configuration.pillBorderStyle
+            borderWidth: Plasmoid.configuration.pillBorderWidth
+            borderOpacity: Plasmoid.configuration.pillBorderOpacity
+            shadowEnabled: Plasmoid.configuration.pillShadow
+            shadowStrength: Plasmoid.configuration.pillShadowStrength
+            highlightStrength: Plasmoid.configuration.glassHighlight
+            vertical: root.isVertical
+            dockEdge: root.dockEdge
+            interactive: Plasmoid.configuration.glassInteractive
+            pointer: container.lastPointer
+            // The physics engine's hover engagement: springs in/out and settles at rest.
+            pointerStrength: dockLayout.hoverAlpha
         }
 
         DockLayoutItem {
@@ -259,9 +240,13 @@ PlasmoidItem {
             bounceEnabled: Plasmoid.configuration.bounceEnabled
             bounceRatio: Plasmoid.configuration.bounceRatio
             // Never override KWindowEffects::enableBlurBehind in Default (Panel Colorizer) or Transparent modes!
-            blurEnabled: root.isCustomGlassPill && Plasmoid.configuration.blurEnabled && !root.inEditMode
-            blurStyle: Plasmoid.configuration.blurStyle
-            pillCornerRadius: Plasmoid.configuration.pillCornerRadius
+            blurEnabled: (root.isCustomGlassPill || root.isPlasmaThemePill)
+                && dockSurface.wantsBlur && Plasmoid.configuration.blurEnabled && !root.inEditMode
+            blurContrast: dockSurface.compositorContrast?.contrast ?? 1.0
+            blurIntensity: dockSurface.compositorContrast?.intensity ?? 1.0
+            blurSaturation: dockSurface.compositorContrast?.saturation ?? 1.0
+            blurMask: root.isPlasmaThemePill ? dockSurface.themeMask : undefined
+            pillCornerRadius: Math.min(Plasmoid.configuration.pillCornerRadius, Math.min(pillRect.width, pillRect.height) * 0.5)
             edgePadding: Plasmoid.configuration.edgePadding
             pillPaddingPrimary: root.backgroundMode === 0 ? 4 : Plasmoid.configuration.pillPaddingPrimary
             pillPaddingCross: root.backgroundMode === 0 ? 0 : Plasmoid.configuration.pillPaddingCross
@@ -293,6 +278,10 @@ PlasmoidItem {
                 dragOffToUnpin: Plasmoid.configuration.dragOffToUnpin
                 indicatorStyle: Plasmoid.configuration.indicatorStyle
                 indicatorPosition: Plasmoid.configuration.indicatorPosition
+                indicatorColorMode: Plasmoid.configuration.indicatorColorMode
+                indicatorOutset: (root.isCustomGlassPill || root.isPlasmaThemePill)
+                    ? Plasmoid.configuration.pillPaddingCross
+                    : Plasmoid.configuration.edgePadding
                 smartLauncherRevision: root.smartLauncherRevision
             }
         }
@@ -317,6 +306,9 @@ PlasmoidItem {
             Behavior on y { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         }
 
+        /// Last pointer position over the dock (kept after leaving so effects fade out in place).
+        property point lastPointer: Qt.point(width / 2, height / 2)
+
         // Single passive HoverHandler — never swallowed by child delegates
         HoverHandler {
             id: dockHover
@@ -324,6 +316,7 @@ PlasmoidItem {
             onPointChanged: {
                 if (hovered) {
                     dockLayout.updatePointer(point.position.x, point.position.y);
+                    container.lastPointer = point.position;
                 }
             }
             onHoveredChanged: {
