@@ -6,13 +6,20 @@
 
 namespace fluctus::glass {
 
+class GlassMaterialWidget;
+
 class GlassEffectConfig : public KCModule {
     Q_OBJECT
 
 public:
     explicit GlassEffectConfig(QObject *parent, const KPluginMetaData &data);
 
+    void load() override;
     void save() override;
+    void defaults() override;
+
+private:
+    GlassMaterialWidget *m_materialEditor{nullptr};
 };
 
 } // namespace fluctus::glass

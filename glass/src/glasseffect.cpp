@@ -428,6 +428,7 @@ void GlassEffect::reconfigure(ReconfigureFlags) {
         m_advertisedBlur = false;
     }
     m_service.setGlobalMode(m_globalMode);
+    m_service.setGlobalMaterial(m_globalMaterial);
 
     const auto windows = effects->stackingOrder();
     for (EffectWindow *w : windows) {

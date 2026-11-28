@@ -12,8 +12,10 @@
 //   Set(s handle, a{sv} match, a{sv} params) -> s windowUuid (empty while unattached)
 //   Unregister(s handle)
 //   GetInfo() -> a{sv}                     { version: u, globalMode: b, capabilities: as }
+//   GetDefaults() -> a{sv}                 current global-mode material parameters
 //   signal Attached(s handle, s windowUuid)
 //   signal Detached(s handle)
+//   signal DefaultsChanged(a{sv} defaults)
 //
 // The caller's process id comes from the D-Bus daemon, so a client can only request glass for
 // windows of its own process. The shape is the window's own blur region (set with
@@ -62,9 +64,16 @@ inline constexpr QLatin1StringView kMode{"mode"};
 /// double 0..2 (default 1): master strength scaling refraction, magnification, dispersion,
 /// pointer bulge and highlights.
 inline constexpr QLatin1StringView kIntensity{"intensity"};
-/// string: "liquid" (default: diffused, magnified, vivid thick slab) or "crystal" (clear, deep,
-/// sharp-edged). Applied first; every other key overrides it.
+/// bool (default false): when true, start from KWin's live global-mode material instead of the
+/// built-in defaults, so omitted keys track Desktop Effects settings automatically.
+inline constexpr QLatin1StringView kFollowGlobal{"followGlobal"};
+/// string: "global" (follow KWin defaults), "light", "medium", "full", "liquid" (default), or
+/// "crystal". Applied first; every other key overrides it.
 inline constexpr QLatin1StringView kPreset{"preset"};
+inline constexpr QLatin1StringView kPresetGlobal{"global"};
+inline constexpr QLatin1StringView kPresetLight{"light"};
+inline constexpr QLatin1StringView kPresetMedium{"medium"};
+inline constexpr QLatin1StringView kPresetFull{"full"};
 inline constexpr QLatin1StringView kPresetLiquid{"liquid"};
 inline constexpr QLatin1StringView kPresetCrystal{"crystal"};
 inline constexpr QLatin1StringView kModeGlass{"glass"};

@@ -65,8 +65,12 @@ struct GlassParameters {
     qreal inset{0.0};
 
     [[nodiscard]] QVariantMap toVariantMap() const;
-    /// Built-in looks: "liquid" (diffused, magnified, vivid thick slab; the defaults) and
-    /// "crystal" (clear, deep, sharp-edged). Tweak any field afterwards.
+    [[nodiscard]] static GlassParameters fromVariantMap(const QVariantMap &map, const GlassParameters &base);
+    [[nodiscard]] static GlassParameters fromVariantMap(const QVariantMap &map);
+    /// Fallback matching KWin's default Desktop Effects material when the effect is not running.
+    [[nodiscard]] static GlassParameters globalFallback();
+    /// Built-in looks: "light", "medium", "full", "liquid" (the defaults), "crystal", "plain",
+    /// and "none". Tweak any field afterwards.
     [[nodiscard]] static GlassParameters preset(QStringView name);
     [[nodiscard]] bool operator==(const GlassParameters &) const = default;
 };
@@ -110,6 +114,11 @@ public:
     /// when the user runs Fluctus Glass in global mode.
     void setBlurOnly(bool blurOnly);
     [[nodiscard]] bool isBlurOnly() const;
+
+    /// When true, omit per-surface optical parameters and let KWin apply its live global Desktop
+    /// Effects material (still sending region/radius/shapes and extraParameters).
+    void setFollowGlobal(bool follow);
+    [[nodiscard]] bool followsGlobal() const;
 
     /// The effect's D-Bus service is present.
     [[nodiscard]] bool isAvailable() const;
@@ -162,6 +171,7 @@ private:
     bool m_registering{false};
     bool m_manageBlur{true};
     bool m_blurOnly{false};
+    bool m_followGlobal{false};
     bool m_blurApplied{false};
 };
 

@@ -4,13 +4,16 @@
 # FluctusGlass client helper (Apache-2.0). Speaks only D-Bus to the Fluctus Glass KWin effect, so it
 # never links GPL code and can be embedded in any application.
 #
-#   Fluctus::GlassClient      static C++ library (GlassRequest, GlassProtocol.hpp)
-#   Kogical.FluctusGlass      installed QML module with the GlassArea element
+#   Fluctus::GlassClient      static C++ library (GlassRequest, GlassProfile, GlassProtocol.hpp)
+#   Fluctus::GlassWidgets     optional Qt Widgets editor & modal dialog (GlassMaterialWidget, GlassSettingsDialog)
+#   Kogical.FluctusGlass      installed QML module (GlassArea, GlassProfile, GlassSettingsDialog)
 
 add_library(fluctus_glassclient STATIC
     include/FluctusGlass/GlassProtocol.hpp
     include/FluctusGlass/GlassRequest.hpp
+    include/FluctusGlass/GlassProfile.hpp
     src/GlassRequest.cpp
+    src/GlassProfile.cpp
 )
 add_library(Fluctus::GlassClient ALIAS fluctus_glassclient)
 set_target_properties(fluctus_glassclient PROPERTIES
@@ -37,7 +40,33 @@ target_include_directories(fluctus_glassprotocol INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
+# Optional Qt Widgets UI shell (shared by Qt Widgets apps and the Desktop Effects KCM).
+find_package(Qt6 6.8 QUIET COMPONENTS Widgets)
+if(Qt6Widgets_FOUND)
+    add_library(fluctus_glasswidgets STATIC
+        include/FluctusGlass/GlassMaterialWidget.hpp
+        include/FluctusGlass/GlassSettingsDialog.hpp
+        widgets/GlassMaterialWidget.cpp
+        widgets/GlassSettingsDialog.cpp
+    )
+    add_library(Fluctus::GlassWidgets ALIAS fluctus_glasswidgets)
+    set_target_properties(fluctus_glasswidgets PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        AUTOMOC ON
+    )
+    target_link_libraries(fluctus_glasswidgets
+        PUBLIC
+            Fluctus::GlassClient
+            Qt6::Widgets
+        PRIVATE
+            fluctus_warnings
+    )
+endif()
+
 if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
+    set_source_files_properties(qml/GlassSettingsDialog.qml PROPERTIES
+        QT_RESOURCE_ALIAS GlassSettingsDialog.qml
+    )
     qt_add_qml_module(fluctus_glass_qml
         URI Kogical.FluctusGlass
         VERSION 1.0
@@ -46,6 +75,9 @@ if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
         SOURCES
             qml/GlassArea.hpp
             qml/GlassArea.cpp
+            qml/GlassProfileQml.hpp
+        QML_FILES
+            qml/GlassSettingsDialog.qml
     )
     target_include_directories(fluctus_glass_qml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/qml)
     target_link_libraries(fluctus_glass_qml PRIVATE
@@ -67,4 +99,8 @@ if(FLUCTUS_BUILD_GLASS_QML AND ECM_FOUND)
         "${CMAKE_CURRENT_BINARY_DIR}/qml/Kogical/FluctusGlass/qmldir"
         "${CMAKE_CURRENT_BINARY_DIR}/qml/Kogical/FluctusGlass/fluctus_glass_qml.qmltypes"
         DESTINATION "${_qmldir}" COMPONENT glass)
+endif()
+
+if(FLUCTUS_BUILD_TESTS)
+    add_subdirectory(tests)
 endif()

@@ -74,7 +74,49 @@ void readShapes(const QVariantMap &map, std::vector<GlassShape> &out) {
 
 Material Material::preset(QStringView name) {
     Material m;
-    if (name == QLatin1String("crystal")) {
+    if (name == p::kPresetLight) {
+        m.intensity = 0.55;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.03F);
+        m.bezel = 22.0;
+        m.refraction = 18.0;
+        m.magnify = 0.04;
+        m.edgeBend = 0.10;
+        m.dispersion = 0.18;
+        m.frost = 0.20;
+        m.saturation = 1.15;
+        m.brightness = 1.02;
+        m.highlight = 0.55;
+        m.sheen = 0.04;
+        m.pointerBulge = 3.0;
+    } else if (name == p::kPresetMedium) {
+        m.intensity = 1.0;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.04F);
+        m.bezel = 36.0;
+        m.refraction = 32.0;
+        m.magnify = 0.12;
+        m.edgeBend = 0.14;
+        m.dispersion = 0.40;
+        m.frost = 0.18;
+        m.saturation = 1.35;
+        m.brightness = 1.04;
+        m.highlight = 0.85;
+        m.sheen = 0.05;
+        m.pointerBulge = 6.0;
+    } else if (name == p::kPresetFull) {
+        m.intensity = 1.25;
+        m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.015F);
+        m.bezel = 64.0;
+        m.refraction = 60.0;
+        m.magnify = 0.34;
+        m.edgeBend = 0.15;
+        m.dispersion = 0.74;
+        m.frost = 0.24;
+        m.saturation = 1.30;
+        m.brightness = 1.03;
+        m.highlight = 1.0;
+        m.sheen = 0.04;
+        m.pointerBulge = 8.0;
+    } else if (name == p::kPresetCrystal) {
         m.tint = QColor::fromRgbF(1.0F, 1.0F, 1.0F, 0.02F);
         m.bezel = 40.0;
         m.refraction = 44.0;
@@ -89,12 +131,55 @@ Material Material::preset(QStringView name) {
     return m;
 }
 
+QVariantMap Material::toVariantMap() const {
+    QString modeStr = QString(p::kModeGlass);
+    if (mode == Mode::Plain) {
+        modeStr = QString(p::kModePlain);
+    } else if (mode == Mode::None) {
+        modeStr = QString(p::kModeNone);
+    }
+    return {
+        {QString(p::kMode), modeStr},
+        {QString(p::kIntensity), intensity},
+        {QString(p::kRadius), radius},
+        {QString(p::kInset), inset},
+        {QString(p::kTint), tint.name(QColor::HexArgb)},
+        {QString(p::kBezel), bezel},
+        {QString(p::kRefraction), refraction},
+        {QString(p::kMagnify), magnify},
+        {QString(p::kEdgeBend), edgeBend},
+        {QString(p::kDispersion), dispersion},
+        {QString(p::kFrost), frost},
+        {QString(p::kSaturation), saturation},
+        {QString(p::kBrightness), brightness},
+        {QString(p::kEdgeShade), edgeShade},
+        {QString(p::kGrain), grain},
+        {QString(p::kHighlight), highlight},
+        {QString(p::kHighlightWidth), highlightWidth},
+        {QString(p::kSheen), sheen},
+        {QString(p::kLightAngle), lightAngle},
+        {QString(p::kInnerBorder), innerBorder.name(QColor::HexArgb)},
+        {QString(p::kOuterBorder), outerBorder.name(QColor::HexArgb)},
+        {QString(p::kBorderWidth), borderWidth},
+        {QString(p::kShadowColor), shadowColor.name(QColor::HexArgb)},
+        {QString(p::kShadowBlur), shadowBlur},
+        {QString(p::kShadowOffsetX), shadowOffsetX},
+        {QString(p::kShadowOffsetY), shadowOffsetY},
+        {QString(p::kPointerLight), pointerLight},
+        {QString(p::kPointerBulge), pointerBulge},
+        {QString(p::kPointerRadius), pointerRadius},
+    };
+}
+
 Material Material::fromVariantMap(const QVariantMap &map, const Material &base) {
     Material m = base;
     if (const auto preset = map.constFind(QString(p::kPreset)); preset != map.cend()) {
-        const Material shapesKept = m;
-        m = Material::preset(preset->toString());
-        m.shapes = shapesKept.shapes;
+        const QString presetName = preset->toString();
+        if (presetName != p::kPresetGlobal) {
+            const Material shapesKept = m;
+            m = Material::preset(presetName);
+            m.shapes = shapesKept.shapes;
+        }
     }
     if (const auto mode = map.constFind(QString(p::kMode)); mode != map.cend()) {
         const QString value = mode->toString();

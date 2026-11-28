@@ -12,6 +12,7 @@ kconfig_add_kcfg_files(kwin_fluctusglass_config_SOURCES ../src/fluctusglassconfi
 add_library(kwin_fluctusglass_config MODULE ${kwin_fluctusglass_config_SOURCES})
 set_target_properties(kwin_fluctusglass_config PROPERTIES AUTOMOC ON)
 target_link_libraries(kwin_fluctusglass_config PRIVATE
+    Fluctus::GlassWidgets
     fluctus_warnings
     Qt6::DBus
     Qt6::Widgets

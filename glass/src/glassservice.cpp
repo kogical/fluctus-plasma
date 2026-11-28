@@ -101,6 +101,37 @@ void GlassService::setGlobalMode(bool global) {
     m_globalMode = global;
 }
 
+void GlassService::setGlobalMaterial(const Material &material) {
+    if (m_globalMaterial == material) {
+        return;
+    }
+    m_globalMaterial = material;
+    QStringList changed;
+    for (auto &[handle, reg] : m_registrations) {
+        if (reg.followGlobal) {
+            reg.material = Material::fromVariantMap(reg.params, m_globalMaterial);
+            changed.append(handle);
+        }
+    }
+    for (const QString &handle : std::as_const(changed)) {
+        notify(handle);
+    }
+    Q_EMIT DefaultsChanged(m_globalMaterial.toVariantMap());
+}
+
+const Material &GlassService::globalMaterial() const {
+    return m_globalMaterial;
+}
+
+Material GlassService::resolveMaterial(const QVariantMap &normParams, bool &followGlobal) const {
+    namespace p = protocol::param;
+    const bool explicitFollow = normParams.value(QString(p::kFollowGlobal)).toBool();
+    const bool presetFollow = normParams.value(QString(p::kPreset)).toString() == p::kPresetGlobal;
+    followGlobal = explicitFollow || presetFollow;
+    return followGlobal ? Material::fromVariantMap(normParams, m_globalMaterial)
+                        : Material::fromVariantMap(normParams);
+}
+
 const std::map<QString, Registration> &GlassService::registrations() const {
     return m_registrations;
 }
@@ -162,7 +193,8 @@ QString GlassService::registerFor(const QString &owner, const QVariantMap &match
     reg.handle = handle;
     reg.owner = owner;
     reg.match = match;
-    reg.material = Material::fromVariantMap(normalised(params));
+    reg.params = normalised(params);
+    reg.material = resolveMaterial(reg.params, reg.followGlobal);
     if (const auto pid = m_ownerPids.find(owner); pid != m_ownerPids.end()) {
         reg.pid = pid->second;
     }
@@ -202,7 +234,8 @@ QString GlassService::Set(const QString &handle, const QVariantMap &match, const
         return {};
     }
     reg->match = match;
-    reg->material = Material::fromVariantMap(normalised(params));
+    reg->params = normalised(params);
+    reg->material = resolveMaterial(reg->params, reg->followGlobal);
     notify(handle);
     // notify() may have bound or rebound the window.
     if (Registration *now = find(handle); now && !now->window.isNull()) {
@@ -231,8 +264,13 @@ QVariantMap GlassService::GetInfo() {
             QStringLiteral("pointer-bulge"),
             QStringLiteral("shadow"),
             QStringLiteral("shapes"),
+            QStringLiteral("defaults"),
         }},
     };
+}
+
+QVariantMap GlassService::GetDefaults() {
+    return m_globalMaterial.toVariantMap();
 }
 
 void GlassService::lookupPid(const QString &owner) {

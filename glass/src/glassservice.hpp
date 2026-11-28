@@ -28,7 +28,9 @@ struct Registration {
     QString owner;              ///< unique bus name of the client
     std::optional<qint64> pid;  ///< known once the bus daemon answered
     QVariantMap match;
+    QVariantMap params;         ///< normalised raw params (kept for live global-default updates)
     Material material;
+    bool followGlobal{false};
     QUuid window;               ///< bound EffectWindow, null while unattached
 };
 
@@ -52,6 +54,8 @@ public:
 
     void setChangeListener(ChangeListener listener);
     void setGlobalMode(bool global);
+    void setGlobalMaterial(const Material &material);
+    [[nodiscard]] const Material &globalMaterial() const;
 
     [[nodiscard]] const std::map<QString, Registration> &registrations() const;
     [[nodiscard]] Registration *find(const QString &handle);
@@ -71,12 +75,15 @@ public Q_SLOTS:
     QString Set(const QString &handle, const QVariantMap &match, const QVariantMap &params);
     void Unregister(const QString &handle);
     QVariantMap GetInfo();
+    QVariantMap GetDefaults();
 
 Q_SIGNALS:
     void Attached(const QString &handle, const QString &windowUuid);
     void Detached(const QString &handle);
+    void DefaultsChanged(const QVariantMap &defaults);
 
 private:
+    [[nodiscard]] Material resolveMaterial(const QVariantMap &normParams, bool &followGlobal) const;
     void lookupPid(const QString &owner);
     void dropOwner(const QString &owner);
     void notify(const QString &handle);
@@ -87,6 +94,7 @@ private:
     std::map<QString, qint64> m_ownerPids;
     std::unique_ptr<QDBusServiceWatcher> m_ownerWatcher;
     ChangeListener m_listener;
+    Material m_globalMaterial;
     quint64 m_nextHandle{1};
     bool m_globalMode{false};
     bool m_exported{false};

@@ -123,6 +123,51 @@ private Q_SLOTS:
         const Material tuned = Material::fromVariantMap({{QString(p::kPreset), QStringLiteral("crystal")}, {QString(p::kFrost), 0.5}});
         QCOMPARE(tuned.frost, 0.5);
         QCOMPARE(Material::preset(u"liquid"), Material{});
+
+        const Material light = Material::preset(u"light");
+        const Material medium = Material::preset(u"medium");
+        const Material full = Material::preset(u"full");
+        QVERIFY(light.intensity < medium.intensity);
+        QVERIFY(medium.intensity < full.intensity);
+
+        const Material roundTripped = Material::fromVariantMap(medium.toVariantMap());
+        QCOMPARE(roundTripped.intensity, medium.intensity);
+        QCOMPARE(roundTripped.refraction, medium.refraction);
+        QCOMPARE(roundTripped.bezel, medium.bezel);
+    }
+
+    void serviceExposesDefaultsAndUpdatesFollowGlobalRegistrations() {
+        GlassService service;
+        QSignalSpy defaultsSpy(&service, &GlassService::DefaultsChanged);
+        QStringList changes;
+        service.setChangeListener([&changes](const QString &handle) { changes.append(handle); });
+
+        Material initial;
+        initial.refraction = 24.0;
+        initial.frost = 0.15;
+        service.setGlobalMaterial(initial);
+        QCOMPARE(defaultsSpy.count(), 1);
+        QCOMPARE(Material::fromVariantMap(service.GetDefaults()).refraction, 24.0);
+
+        const QString h = service.registerFor(
+            QStringLiteral(":1.20"), {},
+            {{QString(p::kFollowGlobal), true}, {QString(p::kRadius), 16.0}});
+        QVERIFY(!h.isEmpty());
+        QVERIFY(service.find(h)->followGlobal);
+        QCOMPARE(service.find(h)->material.refraction, 24.0);
+        QCOMPARE(service.find(h)->material.radius, 16.0);
+
+        // Updating KWin's global material re-resolves followGlobal registrations live.
+        Material updated = initial;
+        updated.refraction = 48.0;
+        updated.frost = 0.40;
+        changes.clear();
+        service.setGlobalMaterial(updated);
+        QCOMPARE(defaultsSpy.count(), 2);
+        QVERIFY(changes.contains(h));
+        QCOMPARE(service.find(h)->material.refraction, 48.0);
+        QCOMPARE(service.find(h)->material.frost, 0.40);
+        QCOMPARE(service.find(h)->material.radius, 16.0);
     }
 
     void materialIgnoresNonFiniteShapes() {
