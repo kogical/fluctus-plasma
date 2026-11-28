@@ -222,6 +222,25 @@ UnavailableReason parseUnavailableReason(std::string_view value) noexcept {
     return UnavailableReason::None;
 }
 
+bool hasBatteryButUnreadable(const BatteryDevice &device) noexcept {
+    return !device.powerAvailable
+        && (device.unavailableReason == UnavailableReason::PermissionDenied
+            || device.unavailableReason == UnavailableReason::DeviceAsleep);
+}
+
+std::vector<std::string> devicesNeedingPermission(std::span<const BatteryDevice> devices) {
+    std::vector<std::string> names;
+    for (const auto &dev : devices) {
+        if (dev.powerAvailable || dev.unavailableReason != UnavailableReason::PermissionDenied) {
+            continue;
+        }
+        if (std::find(names.begin(), names.end(), dev.name) == names.end()) {
+            names.push_back(dev.name);
+        }
+    }
+    return names;
+}
+
 std::vector<BatteryDevice> sortAndFilterDevices(
     std::span<const BatteryDevice> devices,
     const FilterOptions &options
@@ -233,7 +252,7 @@ std::vector<BatteryDevice> sortAndFilterDevices(
         if (options.hideLinePower && dev.category == DeviceCategory::LinePower) {
             continue;
         }
-        if (!options.showStubs && !dev.powerAvailable) {
+        if (!options.showStubs && !dev.powerAvailable && !hasBatteryButUnreadable(dev)) {
             continue;
         }
         out.push_back(dev);

@@ -140,7 +140,11 @@ fn prefer_name(current: Option<&str>, candidate: Option<&str>) -> bool {
             let cur_generic = cur.is_empty() || cur.starts_with("hid-") || cur.starts_with("BAT");
             let cand_generic =
                 cand.is_empty() || cand.starts_with("hid-") || cand.starts_with("BAT");
-            (cur_generic && !cand_generic) || (cur.len() < cand.len() && !cand_generic)
+            // A longer name only wins when it is a more specific form of the current one
+            // ("Pixel" → "Pixel 9"); otherwise the first, most specific source keeps its name
+            // (a paired mouse's "Keychron M6" over its receiver's "Keychron Link-KM").
+            (cur_generic && !cand_generic)
+                || (!cand_generic && cand.len() > cur.len() && cand.contains(cur))
         }
     }
 }
@@ -316,5 +320,38 @@ mod tests {
         let report = result[0].power.report().expect("should have report");
         assert_eq!(report.cells.len(), 2);
         assert_eq!(report.source, ReadSource::BleGattBas);
+    }
+
+    #[test]
+    fn paired_mouse_name_beats_receiver_product_string() {
+        let usb = DeviceAddress::Usb {
+            vendor_id: 0x3434,
+            product_id: 0xd029,
+            serial: None,
+            bus_addr: None,
+        };
+        let vendor = RawObservation {
+            addresses: vec![usb.clone()],
+            name: Some("Keychron M6".to_string()),
+            vendor: None,
+            model: None,
+            vendor_id: Some(0x3434),
+            product_id: Some(0xd029),
+            category: DeviceCategory::Mouse,
+            transport: Transport::WirelessDongle,
+            power: PowerState::Unavailable {
+                reason: UnavailableReason::UnsupportedProtocol,
+            },
+        };
+        let stub = RawObservation {
+            name: Some("Keychron  Keychron Link-KM".to_string()),
+            category: DeviceCategory::Unknown,
+            transport: Transport::Usb,
+            ..vendor.clone()
+        };
+        let devices = correlate(vec![vendor, stub]);
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].name, "Keychron M6");
+        assert_eq!(devices[0].category, DeviceCategory::Mouse);
     }
 }

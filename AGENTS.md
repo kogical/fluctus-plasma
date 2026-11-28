@@ -94,3 +94,14 @@ Run from the repository root (`just` lists everything; `cd dock && just test` wo
 - **Force CMake reconfigure** (after adding files or changing options): `just reconfigure`
 
 Always run `just test` (and `just test-san` after modifying `dock/src/core/`, `dock/src/quick/`, `glass/src/` or `libs/`) before considering a change complete.
+
+---
+
+## 6. Working With a Human in the Loop
+
+Some steps need a person: moving or waking a device, plugging hardware in, clicking through a vendor app, typing a password. Assume nobody is watching the session in real time.
+
+- **Don't block on it.** When you hit such a step, say so in one line ("I'll ask you to wake the mouse later; for now I'm doing the settings pages") and carry on with work that doesn't need them.
+- **Batch the asks.** Collect every human-only step and ask for them together, once you have nothing else left that can proceed without them. Give exact, short instructions and a time window ("move and click the mouse for ~30 seconds, starting now").
+- **Unless they're steering live.** If the person says they're watching and want to do it now, do it now.
+- **Never fake it.** A step that needed a human and didn't happen is reported as not done, with what to do next time.

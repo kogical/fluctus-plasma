@@ -20,6 +20,16 @@ pub const HID_USAGE_PAGE_BATTERY_SYSTEM: u16 = 0x0085;
 /// Usage `0x66` on Battery System Page: `RemainingCapacity`.
 const USAGE_REMAINING_CAPACITY: u16 = 0x0066;
 
+/// How a request leaves the host in [`HidrawDevice::transact`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputPath {
+    /// `write(2)` on the hidraw node: the interrupt OUT endpoint when the interface has one.
+    Interrupt,
+    /// `HIDIOCSOUTPUT`: a `SET_REPORT(Output)` control transfer. Some receivers (Keychron Link)
+    /// ignore their interrupt OUT endpoint and only answer requests sent this way.
+    SetReport,
+}
+
 /// Async handle to a Linux `/dev/hidraw*` device.
 #[derive(Debug, Clone)]
 pub struct HidrawDevice {
@@ -139,6 +149,27 @@ impl HidrawDevice {
         .map_err(|e| Error::Io(std::io::Error::other(e)))?
     }
 
+    /// Sends `request` over `path`, then returns the first input report accepted by `accept`
+    /// within `timeout`. Reports already queued before the request are discarded, and
+    /// unrelated reports (asynchronous notifications) are skipped.
+    pub async fn transact<F>(
+        &self,
+        request: Vec<u8>,
+        path: OutputPath,
+        timeout: Duration,
+        accept: F,
+    ) -> Result<Vec<u8>>
+    where
+        F: Fn(&[u8]) -> bool + Send + 'static,
+    {
+        let dev_path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            transact_blocking(&dev_path, &request, path, timeout, &accept)
+        })
+        .await
+        .map_err(|e| Error::Io(std::io::Error::other(e)))?
+    }
+
     /// Attempts to read a standard USB HID Battery System (`Usage Page 0x85`)
     /// `RemainingCapacity` (`0x66`) feature report from this device.
     pub async fn read_standard_hid_battery(&self) -> Result<Option<BatteryReport>> {
@@ -162,6 +193,82 @@ impl HidrawDevice {
             ReadSource::HidPowerPage,
         )))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn poll_readable(file: &std::fs::File, timeout: Duration) -> std::io::Result<bool> {
+    let mut pfd = libc::pollfd {
+        fd: file.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as libc::c_int;
+    // SAFETY: `pfd` points to a valid stack `pollfd`.
+    let ready = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
+    if ready < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(ready > 0)
+}
+
+#[cfg(target_os = "linux")]
+fn transact_blocking(
+    path: &Path,
+    request: &[u8],
+    output: OutputPath,
+    timeout: Duration,
+    accept: &dyn Fn(&[u8]) -> bool,
+) -> Result<Vec<u8>> {
+    let mut file = open_hidraw(path, true)?;
+    let mut buf = [0u8; 256];
+
+    // Drop reports that were queued before our request.
+    while poll_readable(&file, Duration::ZERO).map_err(|e| map_io_err(path, e))? {
+        if file.read(&mut buf).map_err(|e| map_io_err(path, e))? == 0 {
+            break;
+        }
+    }
+
+    match output {
+        OutputPath::Interrupt => {
+            file.write_all(request).map_err(|e| map_io_err(path, e))?;
+        }
+        OutputPath::SetReport => {
+            let mut req = request.to_vec();
+            // SAFETY: `file` is a valid hidraw fd and `req` is a valid buffer whose length
+            // matches the ioctl size encoding (HIDIOCSOUTPUT, Linux >= 5.11).
+            let rc =
+                unsafe { libc::ioctl(file.as_raw_fd(), hidiocsoutput(req.len()), req.as_mut_ptr()) };
+            if rc < 0 {
+                return Err(map_io_err(path, std::io::Error::last_os_error()));
+            }
+        }
+    }
+
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero()
+            || !poll_readable(&file, remaining).map_err(|e| map_io_err(path, e))?
+        {
+            return Err(Error::Timeout(path.display().to_string()));
+        }
+        let n = file.read(&mut buf).map_err(|e| map_io_err(path, e))?;
+        if accept(&buf[..n]) {
+            return Ok(buf[..n].to_vec());
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn transact_blocking(
+    _path: &Path,
+    _request: &[u8],
+    _output: OutputPath,
+    _timeout: Duration,
+    _accept: &dyn Fn(&[u8]) -> bool,
+) -> Result<Vec<u8>> {
+    Err(Error::Unsupported("hidraw is Linux-only"))
 }
 
 fn open_hidraw(path: &Path, write: bool) -> Result<std::fs::File> {
@@ -190,6 +297,11 @@ const fn ioc(dir: u32, ty: u32, nr: u32, size: usize) -> libc::Ioctl {
 #[cfg(target_os = "linux")]
 const fn hidiocsfeature(len: usize) -> libc::Ioctl {
     ioc(3, b'H' as u32, 0x06, len)
+}
+
+#[cfg(target_os = "linux")]
+const fn hidiocsoutput(len: usize) -> libc::Ioctl {
+    ioc(3, b'H' as u32, 0x0B, len)
 }
 
 #[cfg(target_os = "linux")]

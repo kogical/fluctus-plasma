@@ -148,6 +148,14 @@ namespace fluctus::battery::core {
 [[nodiscard]] CoarseLevel parseCoarseLevel(std::string_view value) noexcept;
 [[nodiscard]] UnavailableReason parseUnavailableReason(std::string_view value) noexcept;
 
+/// A device that has a battery we cannot read right now (needs udev access, or is asleep).
+/// These stay visible even when devices without battery telemetry are hidden.
+[[nodiscard]] bool hasBatteryButUnreadable(const BatteryDevice &device) noexcept;
+
+/// Names of devices whose battery driver was denied access to `/dev/hidraw*` (missing udev
+/// rule), deduplicated, in discovery order.
+[[nodiscard]] std::vector<std::string> devicesNeedingPermission(std::span<const BatteryDevice> devices);
+
 /// Filters and deterministically sorts discovered devices for UI presentation.
 [[nodiscard]] std::vector<BatteryDevice> sortAndFilterDevices(
     std::span<const BatteryDevice> devices,

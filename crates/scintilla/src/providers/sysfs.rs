@@ -24,6 +24,17 @@ pub struct HidrawDeviceInfo {
     pub uniq: Option<String>,
     pub phys: Option<String>,
     pub interface_number: Option<u8>,
+    /// Top-level application collections as `(usage_page, usage)`, read from the
+    /// world-readable `sysfs` report descriptor (no hidraw permission needed).
+    pub collections: Vec<(u16, u16)>,
+}
+
+impl HidrawDeviceInfo {
+    /// Returns `true` when the node exposes a top-level collection on `usage_page`.
+    #[must_use]
+    pub fn has_usage_page(&self, usage_page: u16) -> bool {
+        self.collections.iter().any(|&(page, _)| page == usage_page)
+    }
 }
 
 /// Discovers power supplies from `/sys/class/power_supply/*`.
@@ -197,6 +208,11 @@ pub(crate) async fn enumerate_hidraw_devices() -> Vec<HidrawDeviceInfo> {
             .await
             .and_then(|s| u8::from_str_radix(s.trim(), 16).ok());
 
+        let collections = fs::read(sysfs_path.join("device/report_descriptor"))
+            .await
+            .map(|desc| parse_top_level_collections(&desc))
+            .unwrap_or_default();
+
         devices.push(HidrawDeviceInfo {
             dev_path: PathBuf::from(format!("/dev/{node_name}")),
             sysfs_path,
@@ -207,6 +223,7 @@ pub(crate) async fn enumerate_hidraw_devices() -> Vec<HidrawDeviceInfo> {
             uniq,
             phys,
             interface_number,
+            collections,
         });
     }
     devices
@@ -261,6 +278,66 @@ pub(crate) async fn discover_hid_stubs(hidraw_devices: &[HidrawDeviceInfo]) -> V
     observations
 }
 
+/// Lists the top-level application collections of a HID report descriptor as
+/// `(usage_page, usage)` pairs, in descriptor order.
+#[must_use]
+pub fn parse_top_level_collections(desc: &[u8]) -> Vec<(u16, u16)> {
+    let mut out = Vec::new();
+    let mut usage_page: u16 = 0;
+    let mut usage: Option<u32> = None;
+    let mut depth: u32 = 0;
+    let mut i = 0;
+
+    while i < desc.len() {
+        let prefix = desc[i];
+        if prefix == 0xFE {
+            // Long item: [0xFE, data_size, long_item_tag, data...]
+            let len = desc.get(i + 1).copied().unwrap_or(0) as usize;
+            i = i.saturating_add(3 + len);
+            continue;
+        }
+        let data_len = match prefix & 0x03 {
+            3 => 4,
+            n => n as usize,
+        };
+        if i + 1 + data_len > desc.len() {
+            break;
+        }
+        let data = &desc[i + 1..i + 1 + data_len];
+        let val = data
+            .iter()
+            .rev()
+            .fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
+
+        match ((prefix >> 2) & 0x03, (prefix >> 4) & 0x0F) {
+            // Global: Usage Page
+            (1, 0x00) => usage_page = val as u16,
+            // Local: Usage (a 4-byte usage carries its own page in the high half)
+            (2, 0x00) => usage = Some(val),
+            // Main: Collection
+            (0, 0x0A) => {
+                if depth == 0 && val == 0x01 {
+                    let (page, id) = match usage {
+                        Some(u) if data_len == 4 && u > 0xFFFF => ((u >> 16) as u16, u as u16),
+                        Some(u) => (usage_page, u as u16),
+                        None => (usage_page, 0),
+                    };
+                    out.push((page, id));
+                }
+                depth += 1;
+                usage = None;
+            }
+            // Main: End Collection
+            (0, 0x0C) => depth = depth.saturating_sub(1),
+            // Other main items clear local state.
+            (0, _) => usage = None,
+            _ => {}
+        }
+        i += 1 + data_len;
+    }
+    out
+}
+
 async fn read_trimmed(path: PathBuf) -> Option<String> {
     fs::read_to_string(path)
         .await
@@ -304,6 +381,10 @@ fn extract_mac_from_str(s: &str) -> Option<[u8; 6]> {
 #[must_use]
 pub(crate) fn infer_category_from_name(name: &str) -> DeviceCategory {
     let lower = name.to_ascii_lowercase();
+    // RGB/LED controllers and similar accessories are not game controllers.
+    if lower.contains("led controller") || lower.contains("aura") || lower.contains("rgb controller") {
+        return DeviceCategory::Unknown;
+    }
     if lower.contains("mouse")
         || lower.contains("viper")
         || lower.contains("deathadder")
@@ -368,5 +449,28 @@ mod tests {
         assert_eq!(infer_category_from_name("AirPods Pro"), DeviceCategory::Earbuds);
         assert_eq!(infer_category_from_name("SteelSeries Arctis Nova 7"), DeviceCategory::Headset);
         assert_eq!(infer_category_from_name("Sony WH-1000XM5"), DeviceCategory::Headphones);
+        assert_eq!(
+            infer_category_from_name("AsusTek Computer Inc. AURA LED Controller"),
+            DeviceCategory::Unknown
+        );
+    }
+
+    #[test]
+    fn lists_top_level_collections() {
+        // Captured from a Keychron Link-KM receiver (3434:d029), interface 1: a bridge
+        // collection on page 0x8C followed by the vendor mouse collection on 0xFFC1, then a
+        // nested-collection consumer page.
+        let desc: &[u8] = &[
+            0x05, 0x8c, 0x09, 0x01, 0xa1, 0x01, 0x85, 0xb1, 0x09, 0x02, 0x81, 0x02, 0xc0, //
+            0x06, 0xc1, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x85, 0xb4, 0x09, 0x02, 0x81, 0x02, 0xc0,
+            0x05, 0x01, 0x09, 0x04, 0xa1, 0x01, 0xa1, 0x02, 0x09, 0x30, 0x81, 0x02, 0xc0, 0xc0,
+        ];
+        assert_eq!(
+            parse_top_level_collections(desc),
+            vec![(0x008C, 0x01), (0xFFC1, 0x01), (0x0001, 0x04)]
+        );
+        // VIA raw HID (QMK/ZMK) collection used by Keychron keyboards and receivers.
+        let via = [0x06, 0x60, 0xff, 0x09, 0x61, 0xa1, 0x01, 0xc0];
+        assert_eq!(parse_top_level_collections(&via), vec![(0xFF60, 0x61)]);
     }
 }

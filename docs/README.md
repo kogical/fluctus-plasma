@@ -8,6 +8,8 @@ deeper material: architecture, math, research notes and the rules that keep thin
 - [development.md](development.md): how the repository is laid out, how the builds share one
   cache, the justfile conventions, CI, and how to add a component.
 - [AGENTS.md](../AGENTS.md): hard invariants and coding standards for humans and AI agents alike.
+- [preferences-guidelines.md](preferences-guidelines.md): how settings pages are organized, worded
+  and previewed, and the fallback every component needs when Liquid Glass is missing.
 - [branding/](branding/): logos (`just branding` re-exports the PNGs).
 
 ## Fluctus Dock: [dock/docs/](../dock/docs/README.md)

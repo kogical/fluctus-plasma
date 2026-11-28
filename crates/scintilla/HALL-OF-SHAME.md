@@ -35,9 +35,10 @@ Every manufacturer listed below chose to ignore those standards on at least part
 - **Driver:** `src/vendors/steelseries.rs` (based on `HeadsetControl` and `hid-steelseries`).
 
 ### Keychron — 2.4 GHz & Wired Mode (VID `0x3434`)
-- **What they do:** Over Bluetooth, Keychron peripherals generally comply with GATT `0x180F`. Over USB-C or the 2.4 GHz Keychron Link dongle, however, they switch to undocumented vendor HID reports (`0xB3`/`0xB4` with command `0x06`, or feature reports `0x51`/`0x52` depending on firmware).
-- **What they could have done:** Exposed standard USB HID Usage Page `0x85` on the dongle just as they already expose GATT `0x180F` over BLE.
-- **Driver:** `src/vendors/keychron.rs` (based on `keychron-battery-dkms` and `keychron-battery`).
+- **What they do:** Over Bluetooth, Keychron peripherals generally comply with GATT `0x180F`. Over USB-C or a Keychron receiver, however, they switch to undocumented vendor HID reports on a vendor collection (`0xFFC1`, or `0xFF0A` for 4K/8K mice), with several protocol generations: `B3 06` → `B4 06` (level in byte 20) on the Ultra-Link 8K, feature report `51 06` on wired 1K mice, and something else again on the Link-KM. The receivers ignore their interrupt OUT endpoint; requests must go out as `SET_REPORT` control transfers.
+- **What they could have done:** Exposed standard USB HID Usage Page `0x85` on the receiver just as they already expose GATT `0x180F` over BLE.
+- **Driver:** `src/vendors/keychron.rs` (from `keychron-battery-dkms`, `tailglow` and Keychron Launcher's web app). On a Link-KM (`3434:d029`) the paired-device lookup (`B5 03`) is verified and names the mouse (an M6, `3434:d060`), but that mouse answers neither `B3 06` nor `51 06`; its battery read is still unknown.
+- **Transport quirk:** during testing a Link-KM answered only interrupt OUT in one power cycle and only `SET_REPORT` in another, so `scintilla` tries both. Keychron's Launcher fails on this M6 with *"The driver cannot be used after the device enters sleep mode"* for the same reason `scintilla` does: the mouse never answers `B3 06`. A `usbhid.quirks` boot parameter does **not** fix it.
 
 ### Logitech (VID `0x046D`)
 - **What they do:** Proprietary HID++ 1.0/2.0 protocol with three separate battery feature IDs (`0x1000` Battery Status, `0x1001` Battery Voltage, `0x1004` Unified Battery) requiring runtime feature-index discovery, plus Logitech G headsets that abandon HID++ for separate raw HID reports.
